@@ -4,11 +4,11 @@ import torch.nn.functional as F
 
 # Computing output dimension of conv layer for later computing proper output padding
 def calc_out_shape(in_dim, ks, s, pad):
-    return int((in_dim + 2 * pad - (ks-1) -1) / s + 1)
+    return int((in_dim + 2 * pad - (ks - 1) - 1) / s + 1)
 
-# Computing output padding for proper transpose convolution
+# Computing padding for proper transpose convolution
 def calc_out_pad(target_dim, in_dim, ks, s, pad):
-    return target_dim - (in_dim - 1) * s + 2 * pad - (ks-1)
+    return target_dim - ((in_dim - 1) * s - 2 * pad + (ks - 1) + 1)
 
 # Defining VAE model
 class VAE(nn.Module):
