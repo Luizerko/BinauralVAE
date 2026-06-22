@@ -23,27 +23,86 @@ class BinauralDataset(Dataset):
     def __getitem__(self, idx):
         return torch.load(self.file_paths[idx])
 
-# Creating and saving the dataset
+
+# Creating and saving Mel dataset
 def dataset_create_mel(src_dir, tgt_dir, num_seeds):
     for seed in range(1, num_seeds+1):
-        # Configuring files and directories
-        src_file = os.path.join(src_dir, f'seed{seed}', 'split_mel.npz')
-        tgt_dir = os.path.join(tgt_dir, f'seed_{seed}')
-        os.makedirs(tgt_dir, exist_ok=True)
+        # Excepting broken simulation runs
+        try:
+            # Configuring files and directories
+            src_file = os.path.join(src_dir, f'seed_{seed}', 'split_mel.npz')
+            seed_tgt_dir = os.path.join(tgt_dir, f'seed_{seed}/mel')
+            os.makedirs(seed_tgt_dir, exist_ok=True)
 
-        # Loading the data
-        data = np.load(src_file)
-        mel_left = data['left']
-        mel_right = data['right']
+            # Loading the data
+            data = np.load(src_file)
+            mel_left = data['left']
+            mel_right = data['right']
 
-        # Iterating through the data to save binaural image
-        num_chunks = mel_left.shape[0]
-        for i in range(num_chunks):
-            chunk_left = mel_left[i]
-            chunk_right = mel_right[i]
-            chunk_binaural = np.stack((chunk_left, chunk_right), axis=0)
-            chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.float32)
-            torch.save(chunk_binaural, os.path.join(tgt_dir, f'binaural_image_{i+1}.pt'))
+            # Iterating through the data to save binaural image
+            num_chunks = mel_left.shape[0]
+            for i in range(num_chunks):
+                chunk_left = mel_left[i]
+                chunk_right = mel_right[i]
+                chunk_binaural = np.stack((chunk_left, chunk_right), axis=0)
+                chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.float32)
+                torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
+        except:
+            continue
+
+# Creating and saving STFT 4-channel dataset
+def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
+    for seed in range(1, num_seeds+1):
+        # Excepting broken simulation runs
+        try:
+            # Configuring files and directories
+            src_file = os.path.join(src_dir, f'seed_{seed}', 'split_stft.npz')
+            seed_tgt_dir = os.path.join(tgt_dir, f'seed_{seed}/stft_4ch')
+            os.makedirs(seed_tgt_dir, exist_ok=True)
+
+            # Loading the data
+            data = np.load(src_file)
+            stft_left = data['left']
+            stft_right = data['right']
+
+            # Iterating through the data to save binaural "image"
+            num_chunks = stft_left.shape[0]
+            for i in range(num_chunks):
+                chunk_left = stft_left[i]
+                chunk_right = stft_right[i]
+                chunk_binaural = np.stack((chunk_left.real, chunk_left.imag, chunk_right.real, chunk_right.imag), axis=0)
+                chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.float32)
+                torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
+        except:
+            continue
+
+
+# Creating and saving STFT complex dataset
+def dataset_create_stft_complex(src_dir, tgt_dir, num_seeds):
+    for seed in range(1, num_seeds+1):
+        # Excepting broken simulation runs
+        try:
+            # Configuring files and directories
+            src_file = os.path.join(src_dir, f'seed_{seed}', 'split_stft.npz')
+            seed_tgt_dir = os.path.join(tgt_dir, f'seed_{seed}/stft_complex')
+            os.makedirs(seed_tgt_dir, exist_ok=True)
+
+            # Loading the data
+            data = np.load(src_file)
+            stft_left = data['left']
+            stft_right = data['right']
+
+            # Iterating through the data to save complex binaural "image"
+            num_chunks = stft_left.shape[0]
+            for i in range(num_chunks):
+                chunk_left = stft_left[i]
+                chunk_right = stft_right[i]
+                chunk_binaural = np.stack((chunk_left, chunk_right), axis=0)
+                chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.complex64)
+                torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
+        except:
+            continue
+
 
 if __name__ == '__main__':
     # Parsing arguments
@@ -52,11 +111,10 @@ if __name__ == '__main__':
     parser.add_argument("--source_dir", help="Path to where your raw data is located.", type=str, default='/mnt/c/Users/luisvz/Documents/visgraf/soundspaces/data/mp3d_example/sounds/alarm/simulation/target/')
     parser.add_argument("--target_dir", help="Path to where you want to save your processed data.", type=str, default='dataset/')
     
-    parser.add_argument("--method", help="Choosing a method to process the audio.", type=str, default='mel', choices=['mel', 'stft', 'wav2vec'])
+    parser.add_argument("--method", help="Choosing a method to process the audio.", type=str, default='mel', choices=['mel', 'stft_4ch', 'stft_complex', 'wav2vec'])
     parser.add_argument("--num_seeds", help="Number of seeds to process", type=int, default=1000)
 
     args = parser.parse_args()
 
     # Calling the appropriate method for dataset creation and saving    
-    if args.method == 'mel':
-        dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
+    dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
