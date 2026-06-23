@@ -22,7 +22,7 @@ def train(args):
     sample_shape = dataset[0].shape
     if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
         model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim=args.latent_dim).to(device)
-    model.apply(model.init_weights(method='he'))
+    model.apply(lambda m: model.init_weights(m, method='he'))
 
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
