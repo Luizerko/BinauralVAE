@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -63,6 +65,25 @@ class VAE(nn.Module):
                 decoder.append(nn.ConvTranspose2d(2**(5+(n_filters-1)-i), 2**(5+(n_filters-1)-i-1), kernel_size=(ks_v, ks_h), stride=(s_v, s_h), padding=pad, output_padding=(out_pad_v[i], out_pad_h[i])))
                 decoder.append(nn.ReLU())
         self.decoder = nn.Sequential(*decoder)
+
+    # Initialization function
+    def init_weights(self, m, method='he'):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
+            if method == 'he':
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+            elif method == 'xavier':
+                nn.init.xavier_uniform_(m.weight)
+            elif method == 'torch_default':
+                nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+            
+            if m.bias is not None:
+                if method == 'torch_default':
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                    nn.init.uniform_(m.bias, -bound, bound)
+                else:
+                    nn.init.constant_(m.bias, 0)
+
 
     # Reparametrization trick
     def reparameterize(self, mu, logvar):
