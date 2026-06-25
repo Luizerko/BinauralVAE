@@ -67,7 +67,7 @@ class VAE(nn.Module):
         self.decoder = nn.Sequential(*decoder)
 
     # Initialization function
-    def init_weights(self, m, method='he'):
+    def init_weights(self, m, method='torch_default'):
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
             if method == 'he':
                 nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')

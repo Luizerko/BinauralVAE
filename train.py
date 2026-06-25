@@ -15,7 +15,7 @@ from models.VAE import VAE
 def train(args):
     # Setting up device and dataset/dataloader
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = BinauralDataset(args.dataset_dir)
+    dataset = BinauralDataset(args.dataset_dir, args.dataset_method)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     # Initializing model, optimizer and logger
@@ -26,7 +26,7 @@ def train(args):
 
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    writer = SummaryWriter(log_dir=args.log_dir)
+    writer = SummaryWriter(log_dir=os.path.join(args.log_dir, args.dataset_method))
 
     # Training loop
     model.train()
@@ -78,7 +78,10 @@ def train(args):
 
         if avg_total_loss < best_loss:
             best_loss = avg_total_loss
-            checkpoint_path = os.path.join(args.save_dir, f'model_save.pt')
+
+            checkpoint_path = os.path.join(args.save_dir, args.dataset_method, 'model_save.pt')
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -93,10 +96,10 @@ if __name__ == '__main__':
     # Parsing arguments
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory", required=True)
-    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'], required=True)
+    parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
+    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
     parser.add_argument("--save_dir", type=str, default='models/checkpoints/', help="Directory to save model weights")
-    parser.add_argument("--log_dir", type=str, default='models/logs/', help="Directory for logging during model training")
+    parser.add_argument("--log_dir", type=str, default='runs/', help="Directory for logging during model training")
 
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
@@ -107,9 +110,5 @@ if __name__ == '__main__':
     parser.add_argument("--num_workers", type=int, default=4, help="Number of CPU workers for DataLoader")
 
     args = parser.parse_args()
-
-    args.dataset_dir += args.dataset_method + '/'
-    args.save_dir += args.dataset_method + '/'
-    args.log_dir += args.dataset_method + '/'
 
     train(args)

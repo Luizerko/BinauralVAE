@@ -9,13 +9,14 @@ import numpy as np
 
 # Creating generic torch dataset for btaching and paralelization later on
 class BinauralDataset(Dataset):
-    def __init__(self, dataset_dir):
+    def __init__(self, dataset_dir, method):
         self.file_paths = []
 
         # Iterating through the dataset directories and collecting all binaural images as one big dataset
         seeds = [seed for seed in Path(dataset_dir).iterdir() if seed.is_dir()]
         for seed in sorted(seeds, key=lambda x: x.name):
-            binaural_images = sorted(seed.glob('*.pt'), key=lambda x: int(x.stem.split('_')[1]))
+            seed_method = seed / method
+            binaural_images = sorted(seed_method.glob('*.pt'), key=lambda x: int(x.stem.split('_')[2]))
             self.file_paths.extend(binaural_images)
 
     def __len__(self):
