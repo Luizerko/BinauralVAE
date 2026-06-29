@@ -39,7 +39,7 @@ def train(args):
     patience_counter = 0
     best_val_loss = float('inf')
 
-    writer = SummaryWriter(log_dir=os.path.join(args.log_dir, args.dataset_method))
+    writer = SummaryWriter(log_dir=os.path.join(args.log_dir, args.dataset_method, args.run_name))
 
     # Training loop
     for epoch in range(1, args.epochs+1):
@@ -153,6 +153,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
     parser.add_argument("--save_dir", type=str, default='models/checkpoints/', help="Directory to save model weights")
     parser.add_argument("--log_dir", type=str, default='runs/', help="Directory for logging during model training")
+    parser.add_argument("--run_name", type=str, default='run_0001', help="Run name for proper Tensorboard visualization")
 
     parser.add_argument("--train_size", type=float, default=0.9, help="Train size for train/validation split")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
@@ -162,7 +163,6 @@ if __name__ == '__main__':
     parser.add_argument("--beta_max", type=float, default=1.5, help="Maximum beta weight for KL Divergence loss")
     parser.add_argument("--beta_cycles", type=int, default=8, help="Number of cycles beta weight goes through during training")
     parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
-
     
     parser.add_argument("--latent_dim", type=int, default=32, help="Size of the latent space")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")
