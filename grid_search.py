@@ -1,9 +1,10 @@
-import os
 import argparse
-import math
-import itertools
-import sys
 import copy
+import itertools
+import math
+import os
+import sys
+
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
@@ -19,10 +20,11 @@ from models.VAE import VAE
 
 # Defining parameter grids
 param_grid_mel = {
-    'learning_rate': [1e-4, 1e-3],
+    'learning_rate': [1e-3],
     'patience_tol': [0.1],
-    'beta_max': [1.0, 1.5],
+    'beta_max': [1.5],
     'beta_cycles': [4, 8],
+    'w_init': ['torch_default', 'he'],
     'latent_dim_pow': [5, 6],
     'n_filters': [3, 4],
     'kernel_v': [5, 7],
@@ -33,17 +35,18 @@ param_grid_mel = {
 }
 
 param_grid_stft_4ch = {
-    'learning_rate': [1e-4, 1e-3],
+    'learning_rate': [1e-3],
     'patience_tol': [0.1],
-    'beta_max': [1.0, 1.5],
+    'beta_max': [1.5],
     'beta_cycles': [4, 8],
+    'w_init': ['torch_default', 'he'],
     'latent_dim_pow': [5, 6],
     'n_filters': [3, 4],
     'kernel_v': [5, 7],
     'kernel_h': [5, 7],
     'stride_v': [1, 2],
-    'stride_h': [1, 2],
-    'pad': [0, 1]
+    'stride_h': [1],
+    'pad': [0]
 }
 
 # Worker function
@@ -80,7 +83,7 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
     # Setting up optimizer and early stopping
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    patience_limit = int(args.epochs / 10)
+    patience_limit = int(args.epochs/10)
     patience_counter = 0
     best_val_loss = float('inf')
 
@@ -163,28 +166,18 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
 
         writer.add_scalar('Hyperparameters/Cyclical_Beta', current_beta, epoch)
 
-        for name, param in model.named_parameters():
-            writer.add_histogram(f'Weights/{name}', param, epoch)
-            if param.grad is not None:
-                writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
+        # Conditionally logging weights and gradients so not to overflow tensorboard
+        if epoch % int(args.epochs/10) == 0:
+            for name, param in model.named_parameters():
+                writer.add_histogram(f'Weights/{name}', param, epoch)
+                if param.grad is not None:
+                    writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
 
-        # Early stopping and model saving
+        # Early stopping, but no saving. We don't need to save models here, we just want to evaluate them 
         if val_total_loss < best_val_loss:
             best_val_loss = val_total_loss
             patience_counter = 0
 
-            checkpoint_path = os.path.join(args.save_dir, args.dataset_method, args.run_name, 'model_save.pt')
-            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_loss': val_total_loss,
-            }, checkpoint_path)
-
-            print(f"Saving best model at epoch {epoch}\n")
-            
         elif val_total_loss >= best_val_loss * (1.0 + args.patience_tol):
             patience_counter += 1
         
@@ -210,7 +203,6 @@ if __name__ == '__main__':
     parser.add_argument("--train_size", type=float, default=0.9, help="Train size for train/validation split")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
-    parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
     parser.add_argument("--num_workers", type=int, default=4)
 
     args = parser.parse_args()
