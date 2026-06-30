@@ -14,11 +14,11 @@ def calc_out_pad(target_dim, in_dim, ks, s, pad):
 
 # Defining VAE model
 class VAE(nn.Module):
-    def __init__(self, image_dimensions, image_channels=2, latent_dim=32, n_filters=3, ks_v=7, ks_h=5, s_v=2, s_h=1, pad=0):
+    def __init__(self, image_dimensions, image_channels=2, latent_dim_pow=5, n_filters=3, ks_v=7, ks_h=5, s_v=2, s_h=1, pad=0):
         # Initializing network
         super(VAE, self).__init__()
         self.image_dimensions = image_dimensions
-        self.latent_dim = latent_dim
+        self.latent_dim = 2**latent_dim_pow
 
         # Defining encoder
         encoder = []
@@ -55,7 +55,7 @@ class VAE(nn.Module):
             out_pad_h.append(calc_out_pad(self.shapes[-i-2][1], self.shapes[-i-1][1], ks_h, s_h, pad))
 
         # Defining decoder
-        self.decoder_input = nn.Linear(latent_dim, in_features)
+        self.decoder_input = nn.Linear(self.latent_dim, in_features)
         decoder = [nn.Unflatten(1, (2**(5+(n_filters-1)), v_in_features, h_in_features))]
         for i in range(n_filters):
             if i == n_filters-1:

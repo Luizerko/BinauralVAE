@@ -29,7 +29,7 @@ def train(args):
     # Initializing model
     sample_shape = dataset[0].shape
     if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
-        model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim=args.latent_dim, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
+        model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
     model.apply(lambda m: model.init_weights(m, method=args.w_init))
 
     # Setting up optimizer, early stopping and logger
@@ -122,7 +122,7 @@ def train(args):
             best_val_loss = val_total_loss
             patience_counter = 0
 
-            checkpoint_path = os.path.join(args.save_dir, args.dataset_method, 'model_save.pt')
+            checkpoint_path = os.path.join(args.save_dir, args.dataset_method, args.run_name, 'model_save.pt')
             os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
             torch.save({
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     parser.add_argument("--beta_cycles", type=int, default=8, help="Number of cycles beta weight goes through during training")
     parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
     
-    parser.add_argument("--latent_dim", type=int, default=32, help="Size of the latent space")
+    parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")
     parser.add_argument("--kernel_v", type=int, default=7, help="Kernel size vertically")
     parser.add_argument("--kernel_h", type=int, default=5, help="Kernel size horizontally")
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     parser.add_argument("--stride_h", type=int, default=1, help="Horizontal stride")
     parser.add_argument("--pad", type=int, default=0, help="Amount of padding")
 
-    parser.add_argument("--num_workers", type=int, default=24, help="Number of CPU workers for DataLoader")
+    parser.add_argument("--num_workers", type=int, default=32, help="Number of CPU workers for DataLoader")
 
     args = parser.parse_args()
 

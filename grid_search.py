@@ -1,56 +1,252 @@
-import itertools
-import subprocess
 import os
+import argparse
+import math
+import itertools
+import sys
+import copy
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
-from concurrent.futures import ThreadPoolExecutor
+import torch
+import torch.optim as optim
+import torch.multiprocessing as mp
+from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter
 
-# Defining the grid
-param_grid = {
+from data.data_processing import BinauralDataset
+from models.VAE import VAE
+# from models.CVAE import CVAE
+
+# Defining parameter grids
+param_grid_mel = {
+    'learning_rate': [1e-4, 1e-3],
+    'patience_tol': [0.1],
     'beta_max': [1.0, 1.5],
     'beta_cycles': [4, 8],
-    'learning_rate': [3e-4, 1e-3, 3e-3],
+    'latent_dim_pow': [5, 6],
     'n_filters': [3, 4],
     'kernel_v': [5, 7],
     'kernel_h': [5, 7],
     'stride_v': [1, 2],
-    'stride_h': [1, 2]
+    'stride_h': [1],
+    'pad': [0]
 }
 
-# Launching a single training process
-def run_experiment(run_id, params):
-    run_name = f"run_{run_id:04d}"
-    
-    # Building the terminal command
-    keys = list(param_grid.keys())
-    cmd = ["python", TRAIN_SCRIPT]
-    for key, value in zip(keys, params):
-        cmd.extend([f"--{key}", str(value)])
-        
-    cmd.extend(["--run_name", run_name])
-    
-    print(f"[{run_name}] Started")
-    
-    # Piping output to a text file
-    os.makedirs("grid_logs", exist_ok=True)
-    with open(f"grid_logs/{run_name}.log", "w") as log_file:
-        subprocess.run(cmd, stdout=log_file, stderr=subprocess.STDOUT)
-        
-    print(f"[{run_name}] Finished")
+param_grid_stft_4ch = {
+    'learning_rate': [1e-4, 1e-3],
+    'patience_tol': [0.1],
+    'beta_max': [1.0, 1.5],
+    'beta_cycles': [4, 8],
+    'latent_dim_pow': [5, 6],
+    'n_filters': [3, 4],
+    'kernel_v': [5, 7],
+    'kernel_h': [5, 7],
+    'stride_v': [1, 2],
+    'stride_h': [1, 2],
+    'pad': [0, 1]
+}
 
-if __name__ == "__main__":
-    # Generating all combinations
-    keys = list(param_grid.keys())
-    values = list(param_grid.values())
-    combinations = list(itertools.product(*values))
+# Worker function
+def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base_args):
+    # Isolate args for this specific process
+    args = copy.deepcopy(base_args)
     
-    # Executing in parallel
-    TRAIN_SCRIPT = "train.py"
-    MAX_GPU_WORKERS = 16
-    print(f"Total combinations to run: {len(combinations)}")
-    print(f"Running {MAX_GPU_WORKERS} jobs in parallel\n")
+    # Injecting the grid hyperparameters into the args namespace
+    for key, value in zip(keys, params):
+        setattr(args, key, value)
+    args.run_name = f"run_{run_id:04d}"
     
-    with ThreadPoolExecutor(max_workers=MAX_GPU_WORKERS) as executor:
-        for i, params in enumerate(combinations):
-            executor.submit(run_experiment, i+1, params)
+    print(f"[{args.run_name}] Started")
+
+    # Redirecting outputs to a text file
+    os.makedirs("grid_logs", exist_ok=True)
+    sys.stdout = open(f"grid_logs/{args.run_name}.log", "w+")
+    sys.stderr = sys.stdout
+    print(f"Hyperparameters: {params}\n")
+    
+    # Setting up device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Creating specific dataloaders for every run
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+
+    # Initializing model
+    sample_shape = dataset[0].shape
+    if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
+        model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
+    model.apply(lambda m: model.init_weights(m, method=args.w_init))
+
+    # Setting up optimizer and early stopping
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+
+    patience_limit = int(args.epochs / 10)
+    patience_counter = 0
+    best_val_loss = float('inf')
+
+    # Cleaning log_dir and setting up logger
+    log_path = os.path.join(args.log_dir, args.dataset_method, args.run_name)
+    try:
+        for file in os.listdir(log_path):
+            os.remove(os.path.join(log_path, file))
+    except:
+        pass
+    writer = SummaryWriter(log_dir=os.path.join(args.log_dir, args.dataset_method, args.run_name))
+
+    # Training loop
+    for epoch in range(1, args.epochs+1):
+        model.train()
+        train_rec_loss = 0.0
+        train_kl_loss = 0.0
+        train_total_loss = 0.0
+
+        # Computing cyclic beta coefficient to avoid latent space collapse
+        current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
+
+        progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')
+        for batch_idx, batch in progress_bar:
+            # Forward pass
+            optimizer.zero_grad()
+            x = batch.to(device)
+            rec, mu, logvar = model(x)
+
+            # Loss computation and backward pass
+            rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
             
-    print("Grid search completed")
+            total_loss.backward()
+            optimizer.step()
+
+            # Batch logging
+            train_rec_loss += rec_loss.item()
+            train_kl_loss += kl_loss.item()
+            train_total_loss += total_loss.item()
+
+        # Computing average training loss for logging
+        train_rec_loss = train_rec_loss/len(train_dataloader)
+        train_kl_loss = train_kl_loss/len(train_dataloader)
+        train_total_loss = train_total_loss/len(train_dataloader)
+
+        # Computing validation loss for logging and early stopping
+        model.eval()
+        val_rec_loss = 0.0
+        val_kl_loss = 0.0
+        val_total_loss = 0.0
+
+        progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Val]')
+        with torch.no_grad():
+            for batch_idx, batch in progress_bar:
+                # Forward pass
+                x = batch.to(device)
+                rec, mu, logvar = model(x)
+                
+                # Loss computation
+                rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
+                
+                # Batch logging
+                val_rec_loss += rec_loss.item()
+                val_kl_loss += kl_loss.item()
+                val_total_loss += total_loss.item()
+                
+        # Computing average validation loss for logging
+        val_rec_loss = val_rec_loss/len(val_dataloader)
+        val_kl_loss = val_kl_loss/len(val_dataloader)
+        val_total_loss = val_total_loss/len(val_dataloader)
+
+        # Logging to tensorboard
+        writer.add_scalar('Loss/Train_Reconstruction', train_rec_loss, epoch)
+        writer.add_scalar('Loss/Train_KL_Divergence', train_kl_loss, epoch)
+        writer.add_scalar('Loss/Train_Total', train_total_loss, epoch)
+
+        writer.add_scalar('Loss/Val_Reconstruction', val_rec_loss, epoch)
+        writer.add_scalar('Loss/Val_KL_Divergence', val_kl_loss, epoch)
+        writer.add_scalar('Loss/Val_Total', val_total_loss, epoch)
+
+        writer.add_scalar('Hyperparameters/Cyclical_Beta', current_beta, epoch)
+
+        for name, param in model.named_parameters():
+            writer.add_histogram(f'Weights/{name}', param, epoch)
+            if param.grad is not None:
+                writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
+
+        # Early stopping and model saving
+        if val_total_loss < best_val_loss:
+            best_val_loss = val_total_loss
+            patience_counter = 0
+
+            checkpoint_path = os.path.join(args.save_dir, args.dataset_method, args.run_name, 'model_save.pt')
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_loss': val_total_loss,
+            }, checkpoint_path)
+
+            print(f"Saving best model at epoch {epoch}\n")
+            
+        elif val_total_loss >= best_val_loss * (1.0 + args.patience_tol):
+            patience_counter += 1
+        
+        if patience_counter >= patience_limit:
+            print(f"Early stopping triggered at epoch {epoch}\n")
+            break
+
+    writer.close()
+    print(f"[{args.run_name}] Finished successfully")
+
+
+if __name__ == '__main__':
+    # Multiprocessing in 'spawn' mode for safe CUDA operation
+    mp.set_start_method('spawn', force=True)
+
+    # Parsing arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
+    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
+    parser.add_argument("--save_dir", type=str, default='models/checkpoints/', help="Directory to save model weights")
+    parser.add_argument("--log_dir", type=str, default='runs/', help="Directory for logging during model training")
+    parser.add_argument("--run_name", type=str, default='run_0001', help="Run name for proper Tensorboard visualization")
+    parser.add_argument("--train_size", type=float, default=0.9, help="Train size for train/validation split")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
+    parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
+    parser.add_argument("--num_workers", type=int, default=4)
+
+    args = parser.parse_args()
+
+    dataset = BinauralDataset(args.dataset_dir, args.dataset_method)
+    train_size = int(args.train_size * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    # Selecting the active grid
+    if args.dataset_method == 'mel':
+        keys = list(param_grid_mel.keys())
+        values = list(param_grid_mel.values())
+    elif args.dataset_method == 'stft_4ch':
+        keys = list(param_grid_stft_4ch.keys())
+        values = list(param_grid_stft_4ch.values())
+    
+    combinations = list(itertools.product(*values))
+
+    MAX_GPU_WORKERS = 8
+    print(f"Total combinations to run: {len(combinations)}")
+    
+    # Spawning processes
+    futures = []
+    with ProcessPoolExecutor(max_workers=MAX_GPU_WORKERS, mp_context=mp) as executor:
+        for i, params in enumerate(combinations):
+            future = executor.submit(train_worker, i+1, keys, params, dataset, train_dataset, val_dataset, args)
+            futures.append(future)
+
+        # Catching potential errors for debugging
+        for i, future in enumerate(futures):
+            try:
+                future.result() 
+            except Exception as e:
+                print(f"Error in run {i+1}:")
+                import traceback
+                traceback.print_exc()
+
+    print("Grid search completed globally")
