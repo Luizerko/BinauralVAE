@@ -12,6 +12,12 @@ from data.data_processing import BinauralDataset
 from models.VAE import VAE
 # from models.CVAE import CVAE
 
+
+# Auxiliar heaviside function for beta computation
+def heaviside(x):
+    return 1 if x >= 0 else 0
+
+
 # Main training loop
 def train(args):
     # Setting up device and dataset/dataloader
@@ -48,9 +54,15 @@ def train(args):
         train_kl_loss = 0.0
         train_total_loss = 0.0
 
-        # Computing cyclic beta coefficient to avoid latent space collapse
-        # current_beta = args.beta * min(args.beta, epoch/(args.epochs/2))
-        current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
+        # Computing beta coefficient to avoid latent space collapse
+        # Linear increasing
+        # current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4))
+        
+        # Purely cyclic
+        # current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
+        
+        # Linear increasing + cyclic
+        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
 
         progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')
         for batch_idx, batch in progress_bar:
@@ -159,8 +171,8 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer")
-    parser.add_argument("--patience_tol", type=float, default=0.1, help="Tolerance value for early stopping")
-    parser.add_argument("--beta_max", type=float, default=1.5, help="Maximum beta weight for KL Divergence loss")
+    parser.add_argument("--patience_tol", type=float, default=0.05, help="Tolerance value for early stopping")
+    parser.add_argument("--beta_max", type=float, default=0.8, help="Maximum beta weight for KL Divergence loss")
     parser.add_argument("--beta_cycles", type=int, default=8, help="Number of cycles beta weight goes through during training")
     parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
     
@@ -172,7 +184,7 @@ if __name__ == '__main__':
     parser.add_argument("--stride_h", type=int, default=1, help="Horizontal stride")
     parser.add_argument("--pad", type=int, default=0, help="Amount of padding")
 
-    parser.add_argument("--num_workers", type=int, default=32, help="Number of CPU workers for DataLoader")
+    parser.add_argument("--num_workers", type=int, default=24, help="Number of CPU workers for DataLoader")
 
     args = parser.parse_args()
 

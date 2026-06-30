@@ -51,6 +51,10 @@ param_grid_stft_4ch = {
 
 # Worker function
 def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base_args):
+    # Auxiliar heaviside function for beta computation
+    def heaviside(x):
+        return 1 if x >= 0 else 0
+    
     # Isolate args for this specific process
     args = copy.deepcopy(base_args)
     
@@ -104,7 +108,7 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
         train_total_loss = 0.0
 
         # Computing cyclic beta coefficient to avoid latent space collapse
-        current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
+        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
 
         progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')
         for batch_idx, batch in progress_bar:

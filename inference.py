@@ -27,7 +27,8 @@ def infer_and_plot(args):
         model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
 
     # Loading checkpoint
-    checkpoint = torch.load(args.checkpoint_path, map_location=device)
+    checkpoint_path = os.path.join(args.checkpoint_path, args.dataset_method, args.run_name, 'model_save.pt')
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
@@ -42,6 +43,8 @@ def infer_and_plot(args):
 
     plot_reconstruction(original_data, reconstructed_data)
 
+    return original_data, reconstructed_data
+
 
 # Plotting function
 def plot_reconstruction(original, reconstruction):
@@ -50,40 +53,45 @@ def plot_reconstruction(original, reconstruction):
  
     # Left ears
     ax_orig_l = axes[0, 0]
-    im1 = ax_orig_l.imshow(original[0], aspect='auto', origin='lower', cmap='viridis')
+    im1 = ax_orig_l.imshow(original[0], aspect='auto', origin='lower', cmap='magma')
     ax_orig_l.set_title("Original - Left Ear")
     fig.colorbar(im1, ax=ax_orig_l)
 
     ax_rec_l = axes[0, 1]
-    im2 = ax_rec_l.imshow(reconstruction[0], aspect='auto', origin='lower', cmap='viridis')
+    im2 = ax_rec_l.imshow(reconstruction[0], aspect='auto', origin='lower', cmap='magma')
     ax_rec_l.set_title("Reconstruction - Left Ear")
     fig.colorbar(im2, ax=ax_rec_l)
 
     # Right ears
     ax_orig_r = axes[1, 0]
-    im3 = ax_orig_r.imshow(original[1], aspect='auto', origin='lower', cmap='viridis')
+    im3 = ax_orig_r.imshow(original[1], aspect='auto', origin='lower', cmap='magma')
     ax_orig_r.set_title("Original - Right Ear")
     fig.colorbar(im3, ax=ax_orig_r)
 
     ax_rec_r = axes[1, 1]
-    im4 = ax_rec_r.imshow(reconstruction[1], aspect='auto', origin='lower', cmap='viridis')
+    im4 = ax_rec_r.imshow(reconstruction[1], aspect='auto', origin='lower', cmap='magma')
     ax_rec_r.set_title("Reconstruction - Right Ear")
     fig.colorbar(im4, ax=ax_rec_r)
 
     plt.tight_layout()
     plt.show()
+    plt.close()
+
+
+# Reconstructing audio from model's output
+# def audio_reconstruction()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Parsing arguments
-    parser.add_argument("--checkpoint_path", type=str, default='models/checkpoints/model_save.pt', help="Path to the saved model checkpoint")
+    parser.add_argument("--checkpoint_path", type=str, default='models/checkpoints/', help="Path to the saved model checkpoint")
     parser.add_argument("--dataset_index", type=int, required=True, help="Index of the sample in the dataset to reconstruct")
-
     parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
     parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
-    
+    parser.add_argument("--run_name", type=str, default='test_run_0001', help="Run name for proper Tensorboard visualization")
+
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")
     parser.add_argument("--kernel_v", type=int, default=7, help="Kernel size vertically")
