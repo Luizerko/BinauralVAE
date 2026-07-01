@@ -6,7 +6,7 @@ import os
 import sys
 
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import torch
 import torch.optim as optim
@@ -193,6 +193,14 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
     print(f"[{args.run_name}] Finished successfully")
 
 
+# Helper function to check if a chunk is done
+# def chunk_done(futures):
+#     done = True
+#     for ft in futures:
+#         done = done and ft.done()
+#     return done
+
+
 if __name__ == '__main__':
     # Multiprocessing in 'spawn' mode for safe CUDA operation
     mp.set_start_method('spawn', force=True)
@@ -207,7 +215,8 @@ if __name__ == '__main__':
     parser.add_argument("--train_size", type=float, default=0.9, help="Train size for train/validation split")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for dataloader")
+    parser.add_argument("--num_trains", type=int, default=8, help="Number of training sessions to spawn at a time")
 
     args = parser.parse_args()
 
@@ -225,24 +234,28 @@ if __name__ == '__main__':
         values = list(param_grid_stft_4ch.values())
     
     combinations = list(itertools.product(*values))
-
-    MAX_GPU_WORKERS = 8
     print(f"Total combinations to run: {len(combinations)}")
-    
-    # Spawning processes
-    futures = []
-    with ProcessPoolExecutor(max_workers=MAX_GPU_WORKERS, mp_context=mp) as executor:
-        for i, params in enumerate(combinations):
-            future = executor.submit(train_worker, i+1, keys, params, dataset, train_dataset, val_dataset, args)
-            futures.append(future)
 
-        # Catching potential errors for debugging
-        for i, future in enumerate(futures):
-            try:
-                future.result() 
-            except Exception as e:
-                print(f"Error in run {i+1}:")
-                import traceback
-                traceback.print_exc()
+    # Creating process chunks
+    chunks = [combinations[i:i+args.num_trains] for i in range(0, len(combinations), args.num_trains)]
 
-    print("Grid search completed globally")
+    # Spawning processes, one chunk at a time
+    for idx, chunk in enumerate(chunks):
+        futures = {}
+        with ProcessPoolExecutor(max_workers=args.num_workers+1, mp_context=mp) as executor:
+            for i, params in enumerate(chunk):
+                global_idx = (idx*args.num_trains) + (i+1)
+                future = executor.submit(train_worker, global_idx, keys, params, dataset, train_dataset, val_dataset, args)
+                futures[future] = global_idx
+
+            # Catching potential errors for debugging
+            for i, future in as_completed(futures):
+                run_idx = futures[future]
+                try:
+                    future.result() 
+                except Exception as e:
+                    print(f"Error in run {run_idx}:")
+                    import traceback
+                    traceback.print_exc()
+
+    print("Grid search completed")
