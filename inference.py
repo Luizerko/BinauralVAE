@@ -41,13 +41,16 @@ def infer_and_plot(args):
     original_data = original_sample.cpu().numpy()
     reconstructed_data = reconstruction.squeeze(0).cpu().numpy()
 
-    plot_reconstruction(original_data, reconstructed_data)
+    # Plotting reconstruction and then actually reconstructing audio
+    if args.dataset_method == 'mel':
+        plot_mel(original_data, reconstructed_data)
+        reconstruction_mel(reconstructed_data)
 
     return original_data, reconstructed_data
 
 
-# Plotting function
-def plot_reconstruction(original, reconstruction):
+# Plotting Mel reconstruction
+def plot_mel(original, reconstruction):
     fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 8))
     fig.suptitle('Spatial Audio Reconstruction', fontsize=16)
  
@@ -78,8 +81,26 @@ def plot_reconstruction(original, reconstruction):
     plt.close()
 
 
-# Reconstructing audio from model's output
-# def audio_reconstruction()
+# Plotting STFT-4ch reconstruction
+# def plot_stft_4ch(original, reconstruction):
+#     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(12, 8))
+#     fig.suptitle('Spatial Audio Reconstruction', fontsize=16)
+ 
+    
+
+#     plt.tight_layout()
+#     plt.show()
+#     plt.close()
+
+
+# Reconstructing audio from Mel model's output
+# def reconstruction_mel(data):
+
+
+
+# Reconstructing audio from STFT-4ch model's output
+# def reconstruction_stft_4ch(data):
+
 
 
 if __name__ == '__main__':
@@ -91,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
     parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
     parser.add_argument("--run_name", type=str, default='test_run_0001', help="Run name for proper Tensorboard visualization")
+    parser.add_argument("--output_file", type=str, default='output.wav', help="Path to the output file")
 
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")

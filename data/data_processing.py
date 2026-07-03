@@ -171,7 +171,7 @@ if __name__ == '__main__':
     # Parsing arguments
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--source_dir", help="Path to where your raw data is located.", type=str, default='/mnt/c/Users/luisvz/Documents/visgraf/soundspaces/data/mp3d_example/sounds/alarm/simulation/target/')
+    parser.add_argument("--source_dir", help="Path to where your raw data is located.", type=str, default='/mnt/f/lz/visgraf/soundspaces/data/mp3d/alarm/17DRP5sb8fy/rollout/target_1000/')
     parser.add_argument("--target_dir", help="Path to where you want to save your processed data.", type=str, default='dataset/')
     parser.add_argument("--num_seeds", help="Number of seeds to process", type=int, default=1000)
 

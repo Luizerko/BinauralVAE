@@ -21,12 +21,12 @@ from models.VAE import VAE
 # Defining parameter grids
 param_grid_mel = {
     'learning_rate': [1e-3],
-    'patience_tol': [0.1],
-    'beta_max': [1.5],
-    'beta_cycles': [4, 8],
-    'w_init': ['torch_default', 'he'],
+    'patience_tol': [0.05],
+    'beta_max': [0.8],
+    'beta_cycles': [8],
+    'w_init': ['torch_default', 'he', 'xavier'],
     'latent_dim_pow': [5, 6],
-    'n_filters': [3, 4],
+    'n_filters': [3],
     'kernel_v': [5, 7],
     'kernel_h': [5, 7],
     'stride_v': [1, 2],
@@ -36,12 +36,12 @@ param_grid_mel = {
 
 param_grid_stft_4ch = {
     'learning_rate': [1e-3],
-    'patience_tol': [0.1],
-    'beta_max': [1.5],
-    'beta_cycles': [4, 8],
-    'w_init': ['torch_default', 'he'],
+    'patience_tol': [0.05],
+    'beta_max': [0.8],
+    'beta_cycles': [8],
+    'w_init': ['torch_default', 'he', 'xavier'],
     'latent_dim_pow': [5, 6],
-    'n_filters': [3, 4],
+    'n_filters': [3],
     'kernel_v': [5, 7],
     'kernel_h': [5, 7],
     'stride_v': [1, 2],
@@ -66,8 +66,8 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
     print(f"[{args.run_name}] Started")
 
     # Redirecting outputs to a text file
-    os.makedirs("grid_logs", exist_ok=True)
-    sys.stdout = open(f"grid_logs/{args.run_name}.log", "w+")
+    os.makedirs(f"grid_logs/{args.dataset_method}", exist_ok=True)
+    sys.stdout = open(f"grid_logs/{args.dataset_method}/{args.run_name}.log", "w+")
     sys.stderr = sys.stdout
     print(f"Hyperparameters: {params}\n")
     
@@ -242,14 +242,14 @@ if __name__ == '__main__':
     # Spawning processes, one chunk at a time
     for idx, chunk in enumerate(chunks):
         futures = {}
-        with ProcessPoolExecutor(max_workers=args.num_workers+1, mp_context=mp) as executor:
+        with ProcessPoolExecutor(max_workers=args.num_trains, mp_context=mp) as executor:
             for i, params in enumerate(chunk):
                 global_idx = (idx*args.num_trains) + (i+1)
                 future = executor.submit(train_worker, global_idx, keys, params, dataset, train_dataset, val_dataset, args)
                 futures[future] = global_idx
 
             # Catching potential errors for debugging
-            for i, future in as_completed(futures):
+            for future in as_completed(futures):
                 run_idx = futures[future]
                 try:
                     future.result() 
