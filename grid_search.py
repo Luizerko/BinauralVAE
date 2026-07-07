@@ -35,17 +35,17 @@ param_grid_mel = {
 }
 
 param_grid_stft_4ch = {
-    'learning_rate': [1e-3],
+    'learning_rate': [1e-3, 1e2],
     'patience_tol': [0.05],
-    'beta_max': [0.8],
-    'beta_cycles': [8],
+    'beta_max': [0.6, 1.0],
+    'beta_cycles': [2, 4],
     'w_init': ['torch_default', 'he', 'xavier'],
-    'latent_dim_pow': [5, 6],
+    'latent_dim_pow': [5],
     'n_filters': [3],
     'kernel_v': [5, 7],
     'kernel_h': [5, 7],
     'stride_v': [1, 2],
-    'stride_h': [1],
+    'stride_h': [1, 2],
     'pad': [0]
 }
 
@@ -107,7 +107,14 @@ def train_worker(run_id, keys, params, dataset, train_dataset, val_dataset, base
         train_kl_loss = 0.0
         train_total_loss = 0.0
 
-        # Computing cyclic beta coefficient to avoid latent space collapse
+        # Computing beta coefficient to avoid latent space collapse
+        # Linear increasing
+        # current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4))
+        
+        # Purely cyclic
+        # current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
+
+        # Linear increasing + cyclic
         current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
 
         progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')

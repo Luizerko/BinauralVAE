@@ -56,13 +56,13 @@ def train(args):
 
         # Computing beta coefficient to avoid latent space collapse
         # Linear increasing
-        # current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4))
+        # current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/2))
         
         # Purely cyclic
         # current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
         
         # Linear increasing + cyclic
-        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
+        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/2)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
 
         progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')
         for batch_idx, batch in progress_bar:

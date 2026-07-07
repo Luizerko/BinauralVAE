@@ -3,6 +3,8 @@ import os
 
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
+import soundfile as sf
 
 from data.data_processing import BinauralDataset
 from models.VAE import VAE
@@ -44,7 +46,11 @@ def infer_and_plot(args):
     # Plotting reconstruction and then actually reconstructing audio
     if args.dataset_method == 'mel':
         plot_mel(original_data, reconstructed_data)
-        reconstruction_mel(reconstructed_data)
+        reconstruction_mel(reconstructed_data, args.output_file)
+
+    elif args.dataset_method == 'stft_4ch':
+        plot_stft_4ch(original_data, reconstructed_data)
+        reconstruction_stft_4ch(reconstructed_data, args.output_file, args.n_samples, args.hop_len, args.sample_rate)
 
     return original_data, reconstructed_data
 
@@ -82,25 +88,74 @@ def plot_mel(original, reconstruction):
 
 
 # Plotting STFT-4ch reconstruction
-# def plot_stft_4ch(original, reconstruction):
-#     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(12, 8))
-#     fig.suptitle('Spatial Audio Reconstruction', fontsize=16)
- 
-    
+def plot_stft_4ch(original, reconstruction):
+    fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(12, 16))
+    fig.suptitle('STFT 4-Channel Spatial Audio Reconstruction', fontsize=16)
 
-#     plt.tight_layout()
-#     plt.show()
-#     plt.close()
+    channel_names = ["Left Ear Magnitude", "Left Ear Phase", "Right Ear Magnitude", "Right Ear Phase"]
+    cmaps = ['magma', 'twilight', 'magma', 'twilight']
+
+    for i in range(4):
+        # Original column
+        ax_orig = axes[i, 0]
+        im_orig = ax_orig.imshow(original[i], aspect='auto', origin='lower', cmap=cmaps[i])
+        ax_orig.set_title(f"Original: {channel_names[i]}")
+        fig.colorbar(im_orig, ax=ax_orig)
+
+        # Reconstruction column
+        ax_rec = axes[i, 1]
+        im_rec = ax_rec.imshow(reconstruction[i], aspect='auto', origin='lower', cmap=cmaps[i])
+        ax_rec.set_title(f"Reconstruction: {channel_names[i]}")
+        fig.colorbar(im_rec, ax=ax_rec)
+
+    plt.tight_layout()
+    plt.show()
+    plt.close()
 
 
 # Reconstructing audio from Mel model's output
-# def reconstruction_mel(data):
+def reconstruction_mel(data, output_file='output_mel.wav'):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Loading BigVGAN-v2 model to map mel spectrogram back to audio. The used checkpoint used hop length of 512 instead of our 147, so the audio is probably going to sound slow
+    import bigvgan
+    model = bigvgan.BigVGAN.from_pretrained('nvidia/bigvgan_v2_44khz_128band_512x', use_cuda_kernel=False).to(device)
+    model.remove_weight_norm()
+    model.eval()
 
+    # Processing spectrograms separately since vocoders are normally designed for mono audio, not stereo, including BigVGAN-v2
+    mel_tensor = torch.FloatTensor(data).to(device)
+    with torch.no_grad():
+        wav_l = model(mel_tensor[0].unsqueeze(0)).squeeze().cpu().numpy()
+        wav_r = model(mel_tensor[1].unsqueeze(0)).squeeze().cpu().numpy()
+    stereo_wav = np.stack([wav_l, wav_r], axis=1)
+
+    sf.write(output_file, stereo_wav, 44100)
+    print(f"Saved Mel reconstruction to {output_file}")
 
 
 # Reconstructing audio from STFT-4ch model's output
-# def reconstruction_stft_4ch(data):
+def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop_length=147, sample_rate=44100):
+    # Converting to tensors
+    mag_l, phase_l, mag_r, phase_r = data
+    mag_l = torch.from_numpy(mag_l)
+    phase_l = torch.from_numpy(phase_l)
+    mag_r = torch.from_numpy(mag_r)
+    phase_r = torch.from_numpy(phase_r)
 
+    # Mapping magnitude and angle back to complex numbers using Euler's formula (z = m * e^(i * phi))
+    complex_l = mag_l * torch.exp(1j * phase_l)
+    complex_r = mag_r * torch.exp(1j * phase_r)
+
+    # Inverse STFT with the same window, sample and hop length as the forward process 
+    window = torch.hann_window(n_fft)
+    wav_l = torch.istft(complex_l, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=False)
+    wav_r = torch.istft(complex_r, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=False)
+
+    # Stacking stereo in [Time, Channels] and saving
+    stereo_wav = torch.stack([wav_l, wav_r], dim=1).numpy()
+    sf.write(output_file, stereo_wav, sample_rate) 
+    print(f"Saved STFT reconstruction to {output_file}")
 
 
 if __name__ == '__main__':
@@ -121,6 +176,10 @@ if __name__ == '__main__':
     parser.add_argument("--stride_v", type=int, default=2, help="Vertical stride")
     parser.add_argument("--stride_h", type=int, default=1, help="Horizontal stride")
     parser.add_argument("--pad", type=int, default=0, help="Amount of padding")
+
+    parser.add_argument("--sample_rate", type=int, default=44100, help="Sample rate of original audio. Important for reconstruction")
+    parser.add_argument("--n_samples", type=int, default=0, help="Amount of samples used for STFT processing. Important metric for reconstruction")
+    parser.add_argument("--hop_len", type=int, default=0, help="Time resolution used for STFT processing. Important metric for reconstruction")
 
     args = parser.parse_args()
 

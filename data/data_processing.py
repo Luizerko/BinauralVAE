@@ -120,8 +120,8 @@ def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
             data = np.load(src_file)
             stft_left = data['left']
             stft_right = data['right']
-            mag_left, phase_left = np.abs(stft_left), np.phase(stft_left)
-            mag_right, phase_right = np.abs(stft_right), np.phase(stft_right)
+            mag_left, phase_left = np.abs(stft_left), np.angle(stft_left)
+            mag_right, phase_right = np.abs(stft_right), np.angle(stft_right)
 
             # Iterating through the data to save binaural "image"
             num_chunks = stft_left.shape[0]
@@ -137,6 +137,7 @@ def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
                 
                 torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
         except:
+            print(f'entre 2 {seed}')
             continue
 
 
@@ -178,7 +179,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Calling the appropriate method for dataset creation and saving
-    dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
+    # dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
     dataset_create_stft_4ch(args.source_dir, args.target_dir, args.num_seeds)
-    dataset_create_stft_complex(args.source_dir, args.target_dir, args.num_seeds)
+    # dataset_create_stft_complex(args.source_dir, args.target_dir, args.num_seeds)
     # dataset_create_stft_wav2vec(args.source_dir, args.target_dir, args.num_seeds)
