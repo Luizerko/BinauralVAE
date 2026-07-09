@@ -215,7 +215,7 @@ if __name__ == '__main__':
     # Parsing arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
-    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
+    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used for the dataset creation", choices=['mel', 'stft_4ch', 'stft_complex'])
     parser.add_argument("--save_dir", type=str, default='models/checkpoints/', help="Directory to save model weights")
     parser.add_argument("--log_dir", type=str, default='runs/', help="Directory for logging during model training")
     parser.add_argument("--run_name", type=str, default='run_0001', help="Run name for proper Tensorboard visualization")

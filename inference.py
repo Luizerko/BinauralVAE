@@ -4,6 +4,7 @@ import sys
 
 import torch
 import torchaudio
+import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
@@ -16,14 +17,10 @@ from models.VAE import VAE
 def infer_and_plot(args):
     # Setting up device and dataset
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = BinauralDataset(args.dataset_dir, args.dataset_method)
-    
-    if args.dataset_idx_ini >= len(dataset) or args.dataset_idx_ini < 0 or args.dataset_idx_end >= len(dataset) or args.dataset_idx_end < 0:
-        print(f'Dataset index out of bound. Dataset size: {len(dataset)}')
-        return
+    dataset_path = os.path.join(args.dataset_dir, f'seed_{args.seed_idx}', args.dataset_method)
 
     # Fetching the original sample
-    original_samples = torch.stack([dataset[i] for i in range(args.dataset_idx_ini, args.dataset_idx_end)])
+    original_samples = torch.stack([torch.load(os.path.join(dataset_path, i)) for i in os.listdir(dataset_path)])
     sample_shape = original_samples[0].shape
     
     # Initializing the model
@@ -48,8 +45,9 @@ def infer_and_plot(args):
     # Plotting reconstruction and then actually reconstructing audio
     if args.dataset_method == 'mel':
         plot_mel(original_data[0], reconstructed_data[0])
-        reconstruction_mel(original_data, 'original.wav', args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
-        reconstruction_mel(reconstructed_data, args.output_file, args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
+        ref_power = torch.load(os.path.join(args.dataset_dir, f"seed_{args.seed_idx}", 'mel_ref_power.pt'))['ref_power']
+        reconstruction_mel(original_data, 'original.wav', ref_power, args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
+        reconstruction_mel(reconstructed_data, args.output_file, ref_power, args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
 
     elif args.dataset_method == 'stft_4ch':
         plot_stft_4ch(original_data[0], reconstructed_data[0])
@@ -118,17 +116,21 @@ def plot_stft_4ch(original, reconstruction):
 
 
 # Reconstructing audio from Mel model's output
-def reconstruction_mel(data, output_file='output_mel.wav', n_fft=2048, n_mels=128, hop_len=147, sample_rate=44100, rec_method='GriffinLim'):
+def reconstruction_mel(data, output_file='output_mel.wav', ref_power=10000.0, n_fft=2048, n_mels=128, hop_len=147, sample_rate=44100, rec_method='GriffinLim'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    mel_tensor = torch.FloatTensor(data).to(device)
+    
+    # Stitching spectrograms into a big one
+    mel_l = np.concatenate(data[:, 0], axis=1)
+    mel_r = np.concatenate(data[:, 1], axis=1)
+    stitched_data = np.stack([mel_l, mel_r], axis=0)
+    mel_tensor = torch.FloatTensor(stitched_data).to(device)
 
     # Unormalizing data
     stats = torch.load('data/mel_stats.pt', map_location=device)
     mel_min, mel_max = stats['min'], stats['max']
     mel_tensor = (mel_tensor * (mel_max - mel_min + 1e-8)) + mel_min
 
-    # Converting dB to power and then to magnitude
-    ref_power = 10000.0 
+    # Converting from dBs to power and then to magnitude
     mel_tensor = ref_power * (10.0 ** (mel_tensor / 10.0))
     mel_tensor = torch.sqrt(mel_tensor)
 
@@ -145,8 +147,8 @@ def reconstruction_mel(data, output_file='output_mel.wav', n_fft=2048, n_mels=12
         # Processing spectrograms separately since vocoders are normally designed for mono audio, not stereo, including BigVGAN-v2
         mel_tensor = torch.log(torch.clamp(mel_tensor, min=1e-5))
         with torch.no_grad():
-            wav_l = model(mel_tensor[:, 0]).cpu().numpy()
-            wav_r = model(mel_tensor[:, 1]).cpu().numpy()
+            wav_l = model(mel_tensor[0].unsqueeze(0)).squeeze().cpu().numpy()
+            wav_r = model(mel_tensor[1].unsqueeze(0)).squeeze().cpu().numpy()
     
     elif rec_method == 'GriffinLim':
         # Converiting Mel spectrogram to (magnitude) SFTF and then running Griffim-Lim method
@@ -160,23 +162,23 @@ def reconstruction_mel(data, output_file='output_mel.wav', n_fft=2048, n_mels=12
             linear_stft_r = inverse_mel(mel_tensor[:, 1])
             wav_r = griffin_lim(linear_stft_r).cpu().numpy()
 
-    # Peak-normalization and audio saving
+    # Stacking stereo in [Time, Channels], then peak-normalization and saving
     wav_l = wav_l.flatten()
     wav_r = wav_r.flatten()
     stereo_wav = np.stack([wav_l, wav_r], axis=1)
     max_amplitude = np.max(np.abs(stereo_wav))
     if max_amplitude > 0:
-        stereo_wav = stereo_wav / (max_amplitude + 1e-9)
+        stereo_wav = stereo_wav/(max_amplitude + 1e-9)
     sf.write(output_file, stereo_wav, sample_rate)
 
 
 # Reconstructing audio from STFT-4ch model's output
 def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop_length=147, sample_rate=44100):
     # Converting to tensors
-    mag_l = torch.from_numpy(data[:, 0])
-    phase_l = torch.from_numpy(data[:, 1])
-    mag_r = torch.from_numpy(data[:, 2])
-    phase_r = torch.from_numpy(data[:, 3])
+    mag_l = np.concatenate(data[:, 0], axis=1)
+    phase_l = np.concatenate(data[:, 1], axis=1)
+    mag_r = np.concatenate(data[:, 2], axis=1)
+    phase_r = np.concatenate(data[:, 3], axis=1)
 
     # Unormalizing data
     stats = torch.load('data/stft_stats.pt')
@@ -189,19 +191,19 @@ def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop
     phase_r = (phase_r * (2 * np.pi)) - np.pi
 
     # Mapping magnitude and angle back to complex numbers using Euler's formula (z = m * e^(i * phi))
-    complex_l = mag_l * torch.exp(1j * phase_l)
-    complex_r = mag_r * torch.exp(1j * phase_r)
+    complex_l = mag_l * np.exp(1j * phase_l)
+    complex_r = mag_r * np.exp(1j * phase_r)
 
     # Inverse STFT with the same window, sample and hop length as the forward process 
-    window = torch.hann_window(n_fft)
-    wav_l = torch.istft(complex_l, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=False)
-    wav_r = torch.istft(complex_r, n_fft=n_fft, hop_length=hop_length, window=window, return_complex=False)
+    wav_l = librosa.istft(complex_l, hop_length=hop_length, n_fft=n_fft)
+    wav_r = librosa.istft(complex_r, hop_length=hop_length, n_fft=n_fft)
 
-    # Stacking stereo in [Time, Channels] and saving
-    wav_l = wav_l.flatten().numpy()
-    wav_r = wav_r.flatten().numpy()
+    # Stacking stereo in [Time, Channels], then peak-normalization and saving
     stereo_wav = np.stack([wav_l, wav_r], axis=1)
-    sf.write(output_file, stereo_wav, sample_rate) 
+    max_amplitude = np.max(np.abs(stereo_wav))
+    if max_amplitude > 0:
+        stereo_wav = stereo_wav / (max_amplitude + 1e-9)
+    sf.write(output_file, stereo_wav, sample_rate)
 
 
 if __name__ == '__main__':
@@ -213,9 +215,8 @@ if __name__ == '__main__':
     parser.add_argument("--output_file", type=str, default='reconstructed.wav', help="Path to the output file")
     parser.add_argument("--dataset_dir", type=str, default='data/dataset/', help="Path to processed .pt dataset directory")
 
-    parser.add_argument("--dataset_idx_ini", type=int, required=True, help="Index of initial sample in the dataset to reconstruct")
-    parser.add_argument("--dataset_idx_end", type=int, required=True, help="Index of final sample in the dataset to reconstruct")
-    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex', 'wave2vec'])
+    parser.add_argument("--seed_idx", type=int, required=True, help="Index of the seed to reconstruct")
+    parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex'])
     parser.add_argument("--rec_method", type=str, default='GriffinLim', help="Reconstruction method to be used (only for Mel spectrograms)", choices=['GriffinLim', 'BigVGAN'])
 
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")

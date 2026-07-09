@@ -46,6 +46,12 @@ def dataset_create_mel(src_dir, tgt_dir, num_seeds):
                 global_min = seed_min
             if seed_max > global_max:
                 global_max = seed_max
+
+            # Also saving reference power for good reconstruction later on
+            ref_power_path = os.path.join(tgt_dir, f'seed_{seed}', 'mel_ref_power.pt')
+            os.makedirs(ref_power_path, exist_ok=True)
+            ref_power = np.load(os.path.join(src_dir, f'seed_{seed}', 'mel_ref_power.npz'))['ref_power']
+            torch.save({'ref_power': float(ref_power)}, ref_power_path)
         except:
             continue
 
@@ -182,4 +188,3 @@ if __name__ == '__main__':
     dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
     dataset_create_stft_4ch(args.source_dir, args.target_dir, args.num_seeds)
     dataset_create_stft_complex(args.source_dir, args.target_dir, args.num_seeds)
-    # dataset_create_stft_wav2vec(args.source_dir, args.target_dir, args.num_seeds)
