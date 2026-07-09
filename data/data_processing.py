@@ -179,7 +179,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Calling the appropriate method for dataset creation and saving
-    # dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
+    dataset_create_mel(args.source_dir, args.target_dir, args.num_seeds)
     dataset_create_stft_4ch(args.source_dir, args.target_dir, args.num_seeds)
-    # dataset_create_stft_complex(args.source_dir, args.target_dir, args.num_seeds)
+    dataset_create_stft_complex(args.source_dir, args.target_dir, args.num_seeds)
     # dataset_create_stft_wav2vec(args.source_dir, args.target_dir, args.num_seeds)

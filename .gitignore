@@ -8,4 +8,7 @@ models/checkpoints
 runs
 grid_logs
 
-BigVGAN
+bigvgan
+
+original.wav
+reconstructed.wav
