@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 from pathlib import Path
 
 import torch
@@ -48,10 +49,16 @@ def dataset_create_mel(src_dir, tgt_dir, num_seeds):
                 global_max = seed_max
 
             # Also saving reference power for good reconstruction later on
-            ref_power_path = os.path.join(tgt_dir, f'seed_{seed}', 'mel_ref_power.pt')
+            ref_power_path = os.path.join(tgt_dir, f'seed_{seed}')
             os.makedirs(ref_power_path, exist_ok=True)
             ref_power = np.load(os.path.join(src_dir, f'seed_{seed}', 'mel_ref_power.npz'))['ref_power']
-            torch.save({'ref_power': float(ref_power)}, ref_power_path)
+
+            # Fixing a folder creation mistake on an older version of this script
+            ref_power_pt_path = os.path.join(ref_power_path, 'mel_ref_power.pt')
+            if os.path.isdir(ref_power_pt_path):
+                shutil.rmtree(ref_power_pt_path)
+
+            torch.save({'ref_power': float(ref_power)}, ref_power_pt_path)
         except:
             continue
 
@@ -143,7 +150,6 @@ def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
                 
                 torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
         except:
-            print(f'entre 2 {seed}')
             continue
 
 
@@ -178,9 +184,9 @@ if __name__ == '__main__':
     # Parsing arguments
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--source_dir", help="Path to where your raw data is located.", type=str, default='/mnt/f/lz/visgraf/soundspaces/data/mp3d/alarm/17DRP5sb8fy/rollout/target_1000/')
+    parser.add_argument("--source_dir", help="Path to where your raw data is located.", type=str, default='/mnt/f/lz/visgraf/soundspaces/data/mp3d/alarm/17DRP5sb8fy/rollout/target/')
     parser.add_argument("--target_dir", help="Path to where you want to save your processed data.", type=str, default='dataset/')
-    parser.add_argument("--num_seeds", help="Number of seeds to process", type=int, default=1000)
+    parser.add_argument("--num_seeds", help="Number of seeds to process", type=int, default=1500)
 
     args = parser.parse_args()
 
