@@ -156,10 +156,10 @@ def reconstruction_mel(data, output_file='output_mel.wav', ref_power=10000.0, n_
         griffin_lim = torchaudio.transforms.GriffinLim(n_fft=n_fft, hop_length=hop_len, power=1.0).to(device)
     
         with torch.no_grad():
-            linear_stft_l = inverse_mel(mel_tensor[:, 0])
+            linear_stft_l = inverse_mel(mel_tensor[0])
             wav_l = griffin_lim(linear_stft_l).cpu().numpy()
             
-            linear_stft_r = inverse_mel(mel_tensor[:, 1])
+            linear_stft_r = inverse_mel(mel_tensor[1])
             wav_r = griffin_lim(linear_stft_r).cpu().numpy()
 
     # Stacking stereo in [Time, Channels], then peak-normalization and saving
@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--seed_idx", type=int, required=True, help="Index of the seed to reconstruct")
     parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex'])
-    parser.add_argument("--rec_method", type=str, default='GriffinLim', help="Reconstruction method to be used (only for Mel spectrograms)", choices=['GriffinLim', 'BigVGAN'])
+    parser.add_argument("--rec_method", type=str, default='BigVGAN', help="Reconstruction method to be used (only for Mel spectrograms)", choices=['GriffinLim', 'BigVGAN'])
 
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")
