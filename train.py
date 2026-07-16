@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from data.data_processing import BinauralDataset
 from models.VAE import VAE
-# from models.CVAE import CVAE
+from models.CVAE import CVAE
 
 
 # Auxiliar heaviside function for beta computation
@@ -36,6 +36,8 @@ def train(args):
     sample_shape = dataset[0].shape
     if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
         model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
+    elif args.dataset_method == 'stft_complex':
+        model = CVAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
     model.apply(lambda m: model.init_weights(m, method=args.w_init))
 
     # Setting up optimizer, early stopping and logger
@@ -62,25 +64,28 @@ def train(args):
         # current_beta = args.beta_max * (0.6 - 0.5*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi))
         
         # Linear increasing + cyclic
-        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/4)) + heaviside(int((epoch+1) - args.epochs/5)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
+        current_beta = args.beta_max * min(1.0, (epoch+1)/(args.epochs/3)) + heaviside(int((epoch+1) - args.epochs/3)) * -0.3*math.cos(epoch/(args.epochs/args.beta_cycles) * 2*math.pi)
 
         progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Train]')
         for batch_idx, batch in progress_bar:
-            # Forward pass
+            # Forward pass, loss computation and backward pass
             optimizer.zero_grad()
             x = batch.to(device)
-            rec, mu, logvar = model(x)
-
-            # Loss computation and backward pass
-            rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
+            
+            if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
+                rec, mu, logvar = model(x)
+                rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
+            elif args.dataset_method == 'stft_complex':
+                rec, mu, sigma, delta= model(x)
+                rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, sigma, delta, beta=current_beta)
             
             total_loss.backward()
             optimizer.step()
 
-            # Batch logging
+            # Batch logging (without beta coefficient for proper early stopping)
             train_rec_loss += rec_loss.item()
             train_kl_loss += kl_loss.item()
-            train_total_loss += total_loss.item()
+            train_total_loss += rec_loss.item() + kl_loss.item()
 
         # Computing average training loss for logging
         train_rec_loss = train_rec_loss/len(train_dataloader)
@@ -96,17 +101,20 @@ def train(args):
         progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader), desc=f'Epoch {epoch}/{args.epochs} [Val]')
         with torch.no_grad():
             for batch_idx, batch in progress_bar:
-                # Forward pass
+                # Forward pass and loss computation
                 x = batch.to(device)
-                rec, mu, logvar = model(x)
                 
-                # Loss computation
-                rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
+                if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
+                    rec, mu, logvar = model(x)
+                    rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
+                elif args.dataset_method == 'stft_complex':
+                    rec, mu, sigma, delta= model(x)
+                    rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, sigma, delta, beta=current_beta)
                 
                 # Batch logging
                 val_rec_loss += rec_loss.item()
                 val_kl_loss += kl_loss.item()
-                val_total_loss += total_loss.item()
+                val_total_loss += rec_loss.item() + kl_loss.item()
                 
         # Computing average validation loss for logging
         val_rec_loss = val_rec_loss/len(val_dataloader)
@@ -171,9 +179,9 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer")
-    parser.add_argument("--patience_tol", type=float, default=0.05, help="Tolerance value for early stopping")
+    parser.add_argument("--patience_tol", type=float, default=0.02, help="Tolerance value for early stopping")
     parser.add_argument("--beta_max", type=float, default=0.8, help="Maximum beta weight for KL Divergence loss")
-    parser.add_argument("--beta_cycles", type=int, default=8, help="Number of cycles beta weight goes through during training")
+    parser.add_argument("--beta_cycles", type=int, default=6, help="Number of cycles beta weight goes through during training")
     parser.add_argument("--w_init", type=str, default='torch_default', help="Weight initialization method", choices=['he', 'xavier', 'torch_default'])
     
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
