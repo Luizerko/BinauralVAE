@@ -69,7 +69,7 @@ class CVAE(nn.Module):
 
         # Defining decoder
         self.decoder_input_1 = ComplexLinear(self.latent_dim, self.latent_dim//2)
-        self.decoder_input_1 = ComplexLinear(self.latent_dim//2, in_features)
+        self.decoder_input_2 = ComplexLinear(self.latent_dim//2, in_features)
         decoder = [nn.Unflatten(1, (2**(9-(n_filters-1)), v_in_features, h_in_features))]
         for i in range(n_filters):
             if i == n_filters-1:
@@ -83,22 +83,28 @@ class CVAE(nn.Module):
         self.decoder = nn.Sequential(*decoder)
 
     # Initialization function
-    def init_weights(self, m, method='torch_default'):
-        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-            if method == 'he':
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-            elif method == 'xavier':
-                nn.init.xavier_uniform_(m.weight)
-            elif method == 'torch_default':
-                nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+    # def init_weights(self, m, method='torch_default'):
+    #     if isinstance(m, (ComplexConv2d, ComplexConvTranspose2d, ComplexLinear)):
+    #         if method == 'he':
+    #             nn.init.kaiming_uniform_(m.weight.real, nonlinearity='relu')
+    #             nn.init.kaiming_uniform_(m.weight.imag, nonlinearity='relu')
+    #         elif method == 'xavier':
+    #             nn.init.xavier_uniform_(m.weight.real)
+    #             nn.init.xavier_uniform_(m.weight.imag)
+    #         elif method == 'torch_default':
+    #             nn.init.kaiming_uniform_(m.weight.real, a=math.sqrt(5))
+    #             nn.init.kaiming_uniform_(m.weight.imag, a=math.sqrt(5))
             
-            if m.bias is not None:
-                if method == 'torch_default':
-                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
-                    bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                    nn.init.uniform_(m.bias, -bound, bound)
-                else:
-                    nn.init.constant_(m.bias, 0)
+    #         if m.bias is not None:
+    #             if method == 'torch_default':
+    #                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+    #                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+    #                 nn.init.uniform_(m.bias.real, -bound, bound)
+    #                 nn.init.uniform_(m.bias.imag, -bound, bound)
+    #             else:
+    #                 nn.init.constant_(m.bias.real, 0)
+    #                 nn.init.constant_(m.bias.imag, 0)
+
 
     # Complex Reparametrization trick
     def reparameterize(self, mu, sigma, delta):
@@ -130,7 +136,8 @@ class CVAE(nn.Module):
 
         z = self.reparameterize(mu, sigma, delta)
         
-        h_dec = self.decoder_input(z)
+        h_dec = self.decoder_input_1(z)
+        h_dec = self.decoder_input_2(h_dec)
         return self.decoder(h_dec), mu, sigma, delta
     
     # Loss function rec_loss + beta*kl_loss

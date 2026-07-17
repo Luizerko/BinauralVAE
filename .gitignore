@@ -2,6 +2,7 @@ __pycache__
 
 data/dataset
 data/dataset_1000
+data/dataset_1500
 data/*.pt
 
 models/checkpoints

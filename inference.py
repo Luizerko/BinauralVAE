@@ -4,6 +4,8 @@ import sys
 
 import torch
 import torchaudio
+from torch.utils.data import DataLoader
+
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,12 +39,17 @@ def infer_and_plot(args):
 
     # Running inference
     x = original_samples.to(device)
+    loader = DataLoader(x, batch_size=args.batch_size, shuffle=False)
     with torch.no_grad():
-        if args.dataset_method in ['mel', 'stft_4ch']:
-            reconstructions, _, _ = model(x)
-        elif args.dataset_method == 'stft_complex':
-            reconstructions, _, _, _ = model(x)
-        
+        reconstructions = []
+        for batch in loader:
+            if args.dataset_method in ['mel', 'stft_4ch']:
+                reconstruction, _, _ = model(batch)
+            elif args.dataset_method == 'stft_complex':
+                reconstruction, _, _, _ = model(batch)
+            reconstructions.append(reconstruction)
+    reconstructions = torch.cat(reconstructions, dim=0)
+
     # Moving back to CPU for plotting
     original_data = original_samples.cpu().numpy()
     reconstructed_data = reconstructions.cpu().numpy()
@@ -261,6 +268,12 @@ def reconstruction_stft_complex(data, output_file='output_complex.wav', n_fft=10
     complex_l = np.concatenate(data[:, 0], axis=1)
     complex_r = np.concatenate(data[:, 1], axis=1)
 
+    # Unormalizing data
+    stats = torch.load('data/complex_stats.pt')
+    mag_max = stats['mag_max']
+    complex_l = complex_l*mag_max
+    complex_r = complex_r*mag_max
+
     # Inverse STFT with the same window, sample and hop length as the forward process 
     wav_l = librosa.istft(complex_l, hop_length=hop_length, n_fft=n_fft)
     wav_r = librosa.istft(complex_r, hop_length=hop_length, n_fft=n_fft)
@@ -285,6 +298,7 @@ if __name__ == '__main__':
     parser.add_argument("--seed_idx", type=int, required=True, help="Index of the seed to reconstruct")
     parser.add_argument("--dataset_method", type=str, default='mel', help="Method of audio processing used", choices=['mel', 'stft_4ch', 'stft_complex'])
     parser.add_argument("--rec_method", type=str, default='gl', help="Reconstruction method to be used (only for Mel spectrograms)", choices=['gl', 'bvg'])
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
 
     parser.add_argument("--latent_dim_pow", type=int, default=5, help="Size of the latent space (in powers of 2)")
     parser.add_argument("--n_filters", type=int, default=3, help="Number of conv layers")

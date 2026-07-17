@@ -36,9 +36,9 @@ def train(args):
     sample_shape = dataset[0].shape
     if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
         model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
+        model.apply(lambda m: model.init_weights(m, method=args.w_init))
     elif args.dataset_method == 'stft_complex':
         model = CVAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
-    model.apply(lambda m: model.init_weights(m, method=args.w_init))
 
     # Setting up optimizer, early stopping and logger
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -76,7 +76,7 @@ def train(args):
                 rec, mu, logvar = model(x)
                 rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
             elif args.dataset_method == 'stft_complex':
-                rec, mu, sigma, delta= model(x)
+                rec, mu, sigma, delta = model(x)
                 rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, sigma, delta, beta=current_beta)
             
             total_loss.backward()
@@ -108,7 +108,7 @@ def train(args):
                     rec, mu, logvar = model(x)
                     rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, logvar, beta=current_beta)
                 elif args.dataset_method == 'stft_complex':
-                    rec, mu, sigma, delta= model(x)
+                    rec, mu, sigma, delta = model(x)
                     rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, sigma, delta, beta=current_beta)
                 
                 # Batch logging
@@ -132,10 +132,11 @@ def train(args):
 
         writer.add_scalar('Hyperparameters/Cyclical_Beta', current_beta, epoch)
 
-        for name, param in model.named_parameters():
-            writer.add_histogram(f'Weights/{name}', param, epoch)
-            if param.grad is not None:
-                writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
+        if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
+            for name, param in model.named_parameters():
+                writer.add_histogram(f'Weights/{name}', param, epoch)
+                if param.grad is not None:
+                    writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
 
         # Early stopping and model saving
         if val_total_loss < best_val_loss:
@@ -161,6 +162,9 @@ def train(args):
         if patience_counter >= patience_limit:
             print(f"Early stopping triggered at epoch {epoch}\n")
             break
+
+        import ipdb
+        ipdb.set_trace()
 
     writer.close()
 

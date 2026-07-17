@@ -155,6 +155,27 @@ def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
 
 # Creating and saving STFT complex dataset
 def dataset_create_stft_complex(src_dir, tgt_dir, num_seeds):
+    # Computing normalization statistics
+    global_mag_max = float('-inf')
+    for seed in range(1, num_seeds+1):
+        # Excepting broken simulation runs
+        try:
+            src_file = os.path.join(src_dir, f'seed_{seed}', 'split_stft.npz')
+            data = np.load(src_file)
+            stft_left = data['left']
+            stft_right = data['right']
+            
+            seed_mag_max = max(np.abs(stft_left).max(), np.abs(stft_right).max())
+            
+            if seed_mag_max > global_mag_max:
+                global_mag_max = seed_mag_max
+        except:
+            continue
+
+    # Saving normalization statistics for later audio reconstruction
+    stats = {'mag_max': float(global_mag_max)}
+    torch.save(stats, 'complex_stats.pt')
+    
     for seed in range(1, num_seeds+1):
         # Excepting broken simulation runs
         try:
@@ -171,8 +192,8 @@ def dataset_create_stft_complex(src_dir, tgt_dir, num_seeds):
             # Iterating through the data to save complex binaural "image"
             num_chunks = stft_left.shape[0]
             for i in range(num_chunks):
-                chunk_left = stft_left[i]
-                chunk_right = stft_right[i]
+                chunk_left = stft_left[i]/global_mag_max
+                chunk_right = stft_right[i]/global_mag_max
                 chunk_binaural = np.stack((chunk_left, chunk_right), axis=0)
                 chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.complex64)
                 torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
