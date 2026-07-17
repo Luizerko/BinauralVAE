@@ -163,9 +163,6 @@ def train(args):
             print(f"Early stopping triggered at epoch {epoch}\n")
             break
 
-        import ipdb
-        ipdb.set_trace()
-
     writer.close()
 
 
