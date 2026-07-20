@@ -86,6 +86,7 @@ def train(args):
             train_rec_loss += rec_loss.item()
             train_kl_loss += kl_loss.item()
             train_total_loss += rec_loss.item() + kl_loss.item()
+            print(rec_loss.item(), kl_loss.item())
 
         # Computing average training loss for logging
         train_rec_loss = train_rec_loss/len(train_dataloader)

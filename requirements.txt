@@ -1,0 +1,10 @@
+numpy
+librosa
+matplotlib
+scikit-learn
+scipy
+tensorboard
+tqdm
+ipdb
+soundfile
+complexPyTorch
