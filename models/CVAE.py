@@ -83,27 +83,52 @@ class CVAE(nn.Module):
         self.decoder = nn.Sequential(*decoder)
 
     # Initialization function
-    # def init_weights(self, m, method='torch_default'):
-    #     if isinstance(m, (ComplexConv2d, ComplexConvTranspose2d, ComplexLinear)):
-    #         if method == 'he':
-    #             nn.init.kaiming_uniform_(m.weight.real, nonlinearity='relu')
-    #             nn.init.kaiming_uniform_(m.weight.imag, nonlinearity='relu')
-    #         elif method == 'xavier':
-    #             nn.init.xavier_uniform_(m.weight.real)
-    #             nn.init.xavier_uniform_(m.weight.imag)
-    #         elif method == 'torch_default':
-    #             nn.init.kaiming_uniform_(m.weight.real, a=math.sqrt(5))
-    #             nn.init.kaiming_uniform_(m.weight.imag, a=math.sqrt(5))
+    def init_weights(self, m, method='torch_default'):
+        if isinstance(m, (ComplexConv2d, ComplexConvTranspose2d, ComplexLinear)):
+            if hasattr(m, 'conv_r'):
+                real_m, imag_m = m.conv_r, m.conv_i
+            elif hasattr(m, 'fc_r'):
+                real_m, imag_m = m.fc_r, m.fc_i
+            elif hasattr(m, 'conv_tran_r'):
+                real_m, imag_m = m.conv_tran_r, m.conv_tran_i
+
+            # Scaling factor to split variance equally between real and imaginary parts
+            scale = 1.0/math.sqrt(2.0)
+
+            if method == 'he':
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(real_m.weight)
+                standard_bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
+                bound = standard_bound * scale
+                with torch.no_grad():
+                    real_m.weight.uniform_(-bound, bound)
+                    imag_m.weight.uniform_(-bound, bound)
+                    
+            elif method == 'xavier':
+                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(real_m.weight)
+                standard_bound = math.sqrt(6.0 / (fan_in + fan_out))
+                bound = standard_bound * scale
+                with torch.no_grad():
+                    real_m.weight.uniform_(-bound, bound)
+                    imag_m.weight.uniform_(-bound, bound)
+                    
+            elif method == 'torch_default':
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(real_m.weight)
+                bound = (1.0 / math.sqrt(fan_in)) * scale if fan_in > 0 else 0
+                with torch.no_grad():
+                    real_m.weight.uniform_(-bound, bound)
+                    imag_m.weight.uniform_(-bound, bound)
             
-    #         if m.bias is not None:
-    #             if method == 'torch_default':
-    #                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
-    #                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-    #                 nn.init.uniform_(m.bias.real, -bound, bound)
-    #                 nn.init.uniform_(m.bias.imag, -bound, bound)
-    #             else:
-    #                 nn.init.constant_(m.bias.real, 0)
-    #                 nn.init.constant_(m.bias.imag, 0)
+            if getattr(real_m, 'bias', None) is not None:
+                if method == 'torch_default':
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(real_m.weight)
+                    bound = (1.0 / math.sqrt(fan_in)) * scale if fan_in > 0 else 0
+                    with torch.no_grad():
+                        real_m.bias.uniform_(-bound, bound)
+                        imag_m.bias.uniform_(-bound, bound)
+                else:
+                    with torch.no_grad():
+                        real_m.bias.fill_(0)
+                        imag_m.bias.fill_(0)
 
 
     # Complex Reparametrization trick
@@ -143,12 +168,16 @@ class CVAE(nn.Module):
     # Loss function rec_loss + beta*kl_loss
     def loss(self, rec, x, mu, sigma, delta, beta=2.0):
         # Complex L2 norm as reconstruction loss. Analogously to the conventional VAE, we assume p_theta(z|h) = N_c(z; a, I, O), with z the complex input and h the complex latent variables, so the output of the CVAE is just the complex mean a. For clarity, this distribution means identity covariance (unit circle for every complex variable) and zero pseudo-covariance (circular distribution for every complex variable). This also means that the maximum likelihood estimator for p_theta(z|h) can be approximated with just the squared norm of the difference between the data input an the mean output of the CVAE
+        # import ipdb
+        # ipdb.set_trace()
         rec_loss = torch.sum(torch.abs(x - rec)**2) / x.size(0)
+        # rec_loss = torch.mean(torch.abs(x - rec)**2)
         
         # Complex KL-Divergence against standard circular standard complex gaussian CSCG prior N_c(0, I, O). Formally, D_KL(q_phi(h|z) || p_theta(h)) = D_KL(N_c(mu, sigma, delta) || N_c(0, I, O)) = mu^H * mu + ||sigma - 1 - 1/2 * log(sigma^2 - |delta|^2)||_1
         mean_term = torch.real((torch.conj(mu) * mu).sum(dim=1))
         log_det = torch.log(torch.clamp(sigma ** 2 - torch.abs(delta) ** 2, min=1e-8))
         variance_term = torch.abs(sigma - 1 - log_det / 2).sum(dim=1)
+        # variance_term = torch.clamp(sigma - 1 - log_det / 2, min=1e-8).sum(dim=1)
         kl_loss = torch.mean(mean_term + variance_term)
         
         total_loss = rec_loss + beta * kl_loss

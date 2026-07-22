@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 import sys
 
 import torch
@@ -55,19 +56,20 @@ def infer_and_plot(args):
     reconstructed_data = reconstructions.cpu().numpy()
 
     # Plotting reconstruction and then actually reconstructing audio
+    idx = random.randint(0, len(original_data))
     if args.dataset_method == 'mel':
-        plot_mel(original_data[0], reconstructed_data[0])
+        plot_mel(original_data[idx], reconstructed_data[idx])
         ref_power = torch.load(os.path.join(args.dataset_dir, f"seed_{args.seed_idx}", 'mel_ref_power.pt'))['ref_power']
         reconstruction_mel(original_data, 'original.wav', ref_power, args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
         reconstruction_mel(reconstructed_data, args.output_file, ref_power, args.n_samples, args.mel_bands, args.hop_len, args.sample_rate, args.rec_method)
 
     elif args.dataset_method == 'stft_4ch':
-        plot_stft_4ch(original_data[0], reconstructed_data[0])
+        plot_stft_4ch(original_data[idx], reconstructed_data[idx])
         reconstruction_stft_4ch(original_data, 'original.wav', args.n_samples, args.hop_len, args.sample_rate)
         reconstruction_stft_4ch(reconstructed_data, args.output_file, args.n_samples, args.hop_len, args.sample_rate)
 
     elif args.dataset_method == 'stft_complex':
-        plot_stft_complex(original_data[0], reconstructed_data[0])
+        plot_stft_complex(original_data[idx], reconstructed_data[idx])
         reconstruction_stft_complex(original_data, 'original.wav', args.n_samples, args.hop_len, args.sample_rate)
         reconstruction_stft_complex(reconstructed_data, args.output_file, args.n_samples, args.hop_len, args.sample_rate)
 
@@ -229,7 +231,7 @@ def reconstruction_mel(data, output_file='output_mel.wav', ref_power=10000.0, n_
 
 
 # Reconstructing audio from STFT-4ch model's output
-def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop_length=147, sample_rate=44100):
+def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop_length=147, sample_rate=44100, power=0.3):
     # Converting to tensors
     mag_l = np.concatenate(data[:, 0], axis=1)
     phase_l = np.concatenate(data[:, 1], axis=1)
@@ -237,6 +239,9 @@ def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop
     phase_r = np.concatenate(data[:, 3], axis=1)
 
     # Unormalizing data
+    mag_l = mag_l ** (1.0 / power)
+    mag_r = mag_r ** (1.0 / power)
+
     stats = torch.load('data/stft_stats.pt')
     mag_min, mag_max = stats['mag_min'], stats['mag_max']
     
@@ -263,16 +268,26 @@ def reconstruction_stft_4ch(data, output_file='output_stft.wav', n_fft=1024, hop
 
 
 # Reconstructing audio from Complex STFT model's output
-def reconstruction_stft_complex(data, output_file='output_complex.wav', n_fft=1024, hop_length=147, sample_rate=44100):
+def reconstruction_stft_complex(data, output_file='output_complex.wav', n_fft=1024, hop_length=147, sample_rate=44100, power=0.3):
     # Stitching complex spectrograms along the time axis
     complex_l = np.concatenate(data[:, 0], axis=1)
     complex_r = np.concatenate(data[:, 1], axis=1)
 
     # Unormalizing data
+    mag_l, phase_l = np.abs(complex_l), np.angle(complex_l)
+    mag_r, phase_r = np.abs(complex_r), np.angle(complex_r)
+
+    mag_l = mag_l ** (1.0 / power)
+    mag_r = mag_r ** (1.0 / power)
+
     stats = torch.load('data/complex_stats.pt')
     mag_max = stats['mag_max']
-    complex_l = complex_l*mag_max
-    complex_r = complex_r*mag_max
+
+    mag_l = mag_l * mag_max
+    mag_r = mag_r * mag_max
+
+    complex_l = mag_l * np.exp(1j * phase_l)
+    complex_r = mag_r * np.exp(1j * phase_r)
 
     # Inverse STFT with the same window, sample and hop length as the forward process 
     wav_l = librosa.istft(complex_l, hop_length=hop_length, n_fft=n_fft)

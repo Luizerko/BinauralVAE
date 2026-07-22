@@ -36,12 +36,18 @@ def train(args):
     sample_shape = dataset[0].shape
     if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
         model = VAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
-        model.apply(lambda m: model.init_weights(m, method=args.w_init))
     elif args.dataset_method == 'stft_complex':
         model = CVAE(image_dimensions=(sample_shape[1], sample_shape[2]), image_channels=sample_shape[0], latent_dim_pow=args.latent_dim_pow, n_filters=args.n_filters, ks_v=args.kernel_v, ks_h=args.kernel_h, s_v=args.stride_v, s_h=args.stride_h, pad=args.pad).to(device)
+    model.apply(lambda m: model.init_weights(m, method=args.w_init))
 
     # Setting up optimizer, early stopping and logger
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+
+    # Optimizer warmup for CVAE
+    scheduler = None
+    if args.dataset_method == 'stft_complex':
+        warmup_iters = args.warmup_epochs * len(train_dataloader)
+        scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.5, end_factor=1.0, total_iters=warmup_iters)
 
     patience_limit = int(args.epochs / 10)
     patience_counter = 0
@@ -80,7 +86,15 @@ def train(args):
                 rec_loss, kl_loss, total_loss = model.loss(rec, x, mu, sigma, delta, beta=current_beta)
             
             total_loss.backward()
+
+            # Clipping gradient for CVAE
+            if args.dataset_method == 'stft_complex':
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=100.0)
+
+            # Optimizer step with potential scheduler step for CVAE optmizer warmup
             optimizer.step()
+            if args.dataset_method == 'stft_complex' and epoch <= args.warmup_epochs:
+                scheduler.step()
 
             # Batch logging (without beta coefficient for proper early stopping)
             train_rec_loss += rec_loss.item()
@@ -181,6 +195,8 @@ if __name__ == '__main__':
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer")
+    parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer")
+    parser.add_argument("--warmup_epochs", type=float, default=1, help="Number of epochs for optimizer warmup. Only used for CVAE")
     parser.add_argument("--patience_tol", type=float, default=0.02, help="Tolerance value for early stopping")
     parser.add_argument("--beta_max", type=float, default=0.8, help="Maximum beta weight for KL Divergence loss")
     parser.add_argument("--beta_cycles", type=int, default=6, help="Number of cycles beta weight goes through during training")

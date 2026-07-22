@@ -142,6 +142,9 @@ def dataset_create_stft_4ch(src_dir, tgt_dir, num_seeds):
                 chunk_mag_left = (mag_left[i] - global_mag_min)/(global_mag_max - global_mag_min + 1e-8)
                 chunk_mag_right = (mag_right[i] - global_mag_min)/(global_mag_max - global_mag_min + 1e-8)
                 
+                chunk_mag_left = chunk_mag_left ** 0.3
+                chunk_mag_right = chunk_mag_right ** 0.3
+
                 chunk_phase_left = (phase_left[i] + np.pi)/(2 *np.pi)
                 chunk_phase_right = (phase_right[i] + np.pi)/(2 *np.pi)
 
@@ -192,8 +195,18 @@ def dataset_create_stft_complex(src_dir, tgt_dir, num_seeds):
             # Iterating through the data to save complex binaural "image"
             num_chunks = stft_left.shape[0]
             for i in range(num_chunks):
-                chunk_left = stft_left[i]/global_mag_max
-                chunk_right = stft_right[i]/global_mag_max
+                norm_left = stft_left[i]/global_mag_max
+                norm_right = stft_right[i]/global_mag_max
+
+                mag_l, phase_l = np.abs(norm_left), np.angle(norm_left)
+                mag_r, phase_r = np.abs(norm_right), np.angle(norm_right)
+
+                mag_l = mag_l ** 0.3
+                mag_r = mag_r ** 0.3
+
+                chunk_left = mag_l * np.exp(1j * phase_l)
+                chunk_right = mag_r * np.exp(1j * phase_r) 
+
                 chunk_binaural = np.stack((chunk_left, chunk_right), axis=0)
                 chunk_binaural = torch.tensor(chunk_binaural, dtype=torch.complex64)
                 torch.save(chunk_binaural, os.path.join(seed_tgt_dir, f'binaural_image_{i+1}.pt'))
