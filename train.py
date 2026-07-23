@@ -89,7 +89,7 @@ def train(args):
 
             # Clipping gradient for CVAE
             if args.dataset_method == 'stft_complex':
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=100.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=20.0)
 
             # Optimizer step with potential scheduler step for CVAE optmizer warmup
             optimizer.step()

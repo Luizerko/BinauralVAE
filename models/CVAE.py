@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from complexPyTorch.complexLayers import ComplexConv2d, ComplexLinear, ComplexConvTranspose2d
+from complexPyTorch.complexLayers import ComplexConv2d, ComplexLinear, ComplexConvTranspose2d, ComplexBatchNorm2d
 from complexPyTorch.complexFunctions import complex_relu
 
 
@@ -37,8 +37,10 @@ class CVAE(nn.Module):
         for i in range(n_filters):
             if i == 0:
                 encoder.append(ComplexConv2d(image_channels, 2**(9), kernel_size=(ks_v, ks_h), stride=(s_v, s_h), padding=pad))
+                encoder.append(ComplexBatchNorm2d(2**(9)))
             else:
                 encoder.append(ComplexConv2d(2**(9-i+1), 2**(9-i), kernel_size=(ks_v, ks_h), stride=(s_v, s_h), padding=pad))
+                encoder.append(ComplexBatchNorm2d(2**(9-i)))
             encoder.append(ComplexReLU())
         encoder.append(nn.Flatten())
         self.encoder = nn.Sequential(*encoder)
@@ -79,6 +81,7 @@ class CVAE(nn.Module):
                 decoder.append(nn.Tanh()) 
             else:
                 decoder.append(ComplexConvTranspose2d(2**(9-(n_filters-1)+i), 2**(9-(n_filters-1)+i+1), kernel_size=(ks_v, ks_h), stride=(s_v, s_h), padding=pad, output_padding=(out_pad_v[i], out_pad_h[i])))
+                encoder.append(ComplexBatchNorm2d(2**(9-(n_filters-1)+i+1)))
                 decoder.append(ComplexReLU())
         self.decoder = nn.Sequential(*decoder)
 

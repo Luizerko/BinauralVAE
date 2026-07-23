@@ -97,8 +97,8 @@ This transforms and normalizes the data for all three available modalities. If y
 ```plaintext
 data/
  ├── mel_stats.pt            # Min-max normalization values for Mel spectrograms
- ├── stft_stats.pt           # Min-max normalization values for STFT 4-Channel stacked spectrograms
- ├── complex_stats.pt        # Max normalization values for raw STFT complex outputs
+ ├── stft_stats.pt           # Min-max normalization and 0.3 power-law values for STFT 4-Channel stacked spectrograms
+ ├── complex_stats.pt        # 0.3 power-law and max normalization values for raw STFT complex outputs
  ├── dataset/
  │   ├── seed_1/
  │   │   ├── mel/
@@ -150,6 +150,10 @@ python train.py [ARGS]
 - ``--batch_size``: Batch size (default: 256).
 
 - ``--learning_rate``: Adam optimizer learning rate (default: 1e-3).
+
+- ``--weight_decay``: Weight decay for optimizer (default: 1e-5).
+
+- ``--warmup_epochs``: Number of epochs for optimizer to warmup. Only ever used for stabilizing training for CVAE (default: 1).
 
 - ``--patience_tol``: Tolerance value for early stopping (default: 0.02).
 
