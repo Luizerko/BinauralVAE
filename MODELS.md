@@ -14,6 +14,8 @@ ITD is the microsecond-level difference in time it takes for a sound to reach on
 
 Fortunately, humans rely on two other techniques alongside ITD: the **Internal Level Difference (ILD)**, which is the difference in volume between the ears, and the **Spectral Cues**, which are torso and ear-shape frequency filtering (modeled by HRTFs) that create frequency peaks to help us differentiate sounds coming from above, below, front, or back. Because ILD and spectral cues are captured by Mel spectrograms, all hope is not lost. The architecture provides good general reconstructions and captures these level differences well, though lacking in fine texture. The overall audio reconstruction is satisfactory, though it carries an inherent metallic artifact because we must rely on estimation algorithms (like Griffin-Lim) to approximate the missing phase when inverting the Short-Time Fourier Transform (STFT).
 
+With all the benefits and drawbacks of this model laid out, we provide an overview of the architecture below - note that we made it absolutely generalizable, so you can scale the layers as much as you want. We also include some reconstruction results and a bit of latent space dreaming.
+
 []
 
 ---
@@ -24,7 +26,7 @@ This architecture mirrors the Mel VAE, but instead of Mel spectrograms, we direc
 
 We stacked the information into four channels: Left Magnitude, Left Phase, Right Magnitude, and Right Phase. You might think our problem is solved, but it's actually not. Phase information is notoriously difficult for neural networks to reconstruct for two reasons. First, it looks like absolute noise, meaning it requires highly variant, fine-detail reconstruction (which VAEs struggle with). Second, phase is circular, wrapping from $-\pi$ to $\pi$. A network treating this as linear image data fails to understand that $-\pi$ and $\pi$ are the exact same value.
 
-The magnitude reconstruction performs decently, but as expected, the phase reconstruction fails drastically. Because the network cannot parse the circular variance of phase, it takes the safest path to minimize Mean Squared Error: it mostly predicts an average, smoothed-out value for all inputs.
+The magnitude reconstruction performs decently, but as expected, the phase reconstruction fails drastically. Because the network cannot parse the circular variance of phase, it takes the safest path to minimize Mean Squared Error (MSE): it mostly predicts an average, smoothed-out value for all inputs. We also provide the architecture for this approach below - again, designed to be completely generalizable and scalable so you can adapt it to your needs - as well as some reconstruction results and a bit of latent space dreaming.
 
 []
 
@@ -73,7 +75,7 @@ Now, we evaluate each term inside the KL-Divergence brackets:
 
 2.  $\boldsymbol{\mu}_q^T (2\mathbf{I}) \boldsymbol{\mu}_q = 2 (\text{Re}(\mu_j)^2 + \text{Im}(\mu_j)^2) = 2|\mu_j|^2$
 
-3.  $- k = -2$
+3.  $-k = -2$
 
 4.  $\ln\left(\frac{1/4}{(\sigma_j^2 - |\delta_j|^2)/4}\right) = \ln\left(\frac{1}{\sigma_j^2 - |\delta_j|^2}\right) = -\ln(\sigma_j^2 - |\delta_j|^2)$
 
@@ -86,30 +88,49 @@ To get the total KL-Divergence for the entire latent space, we simply sum this o
 
 $$D_{KL}(q_{\phi}(\mathbf{h}|\mathbf{z}) || p(\mathbf{h})) = \boldsymbol{\mu}^H\boldsymbol{\mu} + \left|\left| \boldsymbol{\sigma} - \mathbf{1} - \frac{1}{2}\log(\boldsymbol{\sigma}^2 - |\boldsymbol{\delta}|^2) \right|\right|_1$$
 
-<!-- ### The Reparameterization Trick & Cholesky Decomposition
+### The Reparameterization Trick
 
-To backpropagate through this complex distribution, we must use the reparameterization trick. We sample a standard real noise vector $\boldsymbol{\epsilon} = [\epsilon_r, \epsilon_i]^T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ and stretch it using a lower-triangular transformation matrix $\mathbf{L}$ such that $\mathbf{L}\mathbf{L}^T = \mathbf{S}$.
+Even though we have the KL-Divergence, we still need to handle the reparameterization trick to be able to sample from the posterior distribution while also allowing gradients to flow. This is a bit more tricky than the standard VAE, but we’ll get there. Let’s first decompose the latent variables $\mathbf{h}$ into real and imaginary parts $\mathbf{x} \in \mathbb{R}^N$ and $\mathbf{y} \in \mathbb{R}^N$ as $\mathbf{h} = \mathbf{x} + i\mathbf{y}$. Under the assumption of the diagonal covariance and pseudo-covariance matrices, which is the posterior distribution we are actually sampling our latent variables from, we know that all the complex variables are independent from one another and we can understand each individual $\mathbf{h}_j \in \mathbf{h}$ as a 2D real Gaussian distribution. These variables, as dicussed before, are $\mathbf{h}_j = [x, y]^T$ and follow $\mathbf{h}_j \sim \mathcal{N}(\boldsymbol{\mu_{h_j}}, \mathbf{\Sigma_{h_j}})$.
 
-**Finding L (Cholesky Decomposition):**
-Given our covariance matrix $\mathbf{S}$:
-$$ \mathbf{L} = \begin{bmatrix} l_{11} & 0 \\ l_{21} & l_{22} \end{bmatrix} \implies \mathbf{L}\mathbf{L}^T = \begin{bmatrix} l_{11}^2 & l_{11}l_{21} \\ l_{11}l_{21} & l_{21}^2 + l_{22}^2 \end{bmatrix} = \begin{bmatrix} \frac{\sigma + \delta_r}{2} & \frac{\delta_i}{2} \\ \frac{\delta_i}{2} & \frac{\sigma - \delta_r}{2} \end{bmatrix} $$
+For the reparameterization trick, we need to find a transformation matrix $\mathbf{L}$ such that if we sample two independent standard normal variables $\boldsymbol{\epsilon} = [\epsilon_r, \epsilon_i]^T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$, then $\mathbf{h}_j = \boldsymbol{\mu_{h_j}} + \mathbf{L}\boldsymbol{\epsilon}$ produces the covariance $\mathbf{\Sigma_{h_j}} = \mathbf{L}\mathbf{L}^T$. To understand that better, think about it like this: if we sample a vector $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ and want to stretch it using some matrix $\mathbf{A}$, we do $\mathbf{z} = \mathbf{A}\boldsymbol{\epsilon}$. Now the covariance of this new vector is $Cov(\mathbf{A}\boldsymbol{\epsilon}) = \mathbf{A} \cdot Cov(\boldsymbol{\epsilon}) \cdot \mathbf{A}^T$. Because $Cov(\boldsymbol{\epsilon}) = \mathbf{I}$, this simplifies to $Cov(\mathbf{z}) = \mathbf{A} \mathbf{I} \mathbf{A}^T = \mathbf{A}\mathbf{A}^T$. Now, if we want our new covariance matrix to be $\mathbf{S}$ (our $\mathbf{\Sigma_{h_j}}$) we have to solve $\mathbf{A}\mathbf{A}^T = \mathbf{S}$.
 
-Solving system of equations:
-1.  $l_{11} = \sqrt{\frac{\sigma + \delta_r}{2}}$
-2.  $l_{21} = \frac{\delta_i / 2}{l_{11}} = \frac{\delta_i}{\sqrt{2(\sigma + \delta_r)}}$
-3.  $l_{22} = \sqrt{\frac{\sigma - \delta_r}{2} - l_{21}^2} = \sqrt{\frac{\sigma^2 - \delta_r^2 - \delta_i^2}{2(\sigma + \delta_r)}} = \frac{\sqrt{\sigma^2 - |\delta|^2}}{\sqrt{2(\sigma + \delta_r)}}$
+This is solved using the Cholesky decomposition, which is the matrix equivalent of finding a square root. Because $\mathbf{L}$ must be a lower-triangular matrix, we set it up as $\mathbf{L} = \begin{bmatrix} l_{11} & 0 \\ l_{21} & l_{22} \end{bmatrix}$. Multiplying $\mathbf{L}$ by its transpose $\mathbf{L}^T$ gives us:
 
-Applying this matrix to our noise $\boldsymbol{\epsilon}$ maps perfectly to Nakashika's complex multipliers, $k_r$ and $k_i$, combining the real and imaginary shifts into a single complex multiplication:
-$$ k_r = l_{11} + i l_{21} = \frac{\sigma + \delta_r + i\delta_i}{\sqrt{2(\sigma + \delta_r)}} = \frac{\sigma + \delta}{\sqrt{2(\sigma + \text{Re}(\delta))}} $$
-$$ k_i = i l_{22} = \frac{i \sqrt{\sigma^2 - |\delta|^2}}{\sqrt{2(\sigma + \text{Re}(\delta))}} $$
+$$\mathbf{L}\mathbf{L}^T = \begin{bmatrix} l_{11} & 0 \\ l_{21} & l_{22} \end{bmatrix} \begin{bmatrix} l_{11} & l_{21} \\ 0 & l_{22} \end{bmatrix} = \begin{bmatrix} l_{11}^2 & l_{11}l_{21} \\ l_{11}l_{21} & l_{21}^2 + l_{22}^2 \end{bmatrix}$$
 
-As noted in the code, for the matrix to be positive definite (and the math to exist), the determinant must be strictly greater than zero:
-$$ \text{Det}(\mathbf{S}) = \frac{\sigma^2 - |\delta|^2}{4} > 0 \implies \sigma^2 > |\delta|^2 \implies \sigma > |\delta| $$
+We set this equal to our target covariance matrix $\mathbf{\Sigma_{h_j}}$, which we mapped out using $\sigma$ and $\delta$ in a previous section to get:
+
+$$\begin{bmatrix} l_{11}^2 & l_{11}l_{21} \\ l_{11}l_{21} & l_{21}^2 + l_{22}^2 \end{bmatrix} = \begin{bmatrix} \frac{\sigma + \delta_r}{2} & \frac{\delta_i}{2} \\ \frac{\delta_i}{2} & \frac{\sigma - \delta_r}{2} \end{bmatrix}$$
+
+Now we simply solve this system of equations to find the values inside $\mathbf{L}$:
+
+1. $l_{11}^2 = \frac{\sigma + \delta_r}{2} \implies l_{11} = \sqrt{\frac{\sigma + \delta_r}{2}}$
+
+2. $l_{11}l_{21} = \frac{\delta_i}{2} \implies l_{21} = \frac{\delta_i / 2}{l_{11}} = \frac{\delta_i}{2\sqrt{\frac{\sigma + \delta_r}{2}}} = \frac{\delta_i}{\sqrt{2(\sigma + \delta_r)}}$
+
+3. $l_{21}^2 + l_{22}^2 = \frac{\sigma - \delta_r}{2} \implies l_{22} = \sqrt{\frac{\sigma - \delta_r}{2} - l_{21}^2} = \sqrt{\frac{\sigma - \delta_r}{2} - \frac{\delta_i^2}{2(\sigma + \delta_r)}} = \sqrt{\frac{\sigma^2 - \delta_r^2 - \delta_i^2}{2(\sigma + \delta_r)}} = \sqrt{\frac{\sigma^2 - |\delta|^2}{2(\sigma + \delta_r)}}$
+
+We now multiply our standard normal noise by $\mathbf{L}$ to get the exact covariance shape $\mathbf{\Sigma_{h_j}}$: 
+
+$$\begin{bmatrix} x_{shifted} \\ y_{shifted} \end{bmatrix} = \mathbf{L} \begin{bmatrix} \epsilon_r \\ \epsilon_i \end{bmatrix} = \begin{bmatrix} l_{11} & 0 \\ l_{21} & l_{22} \end{bmatrix} \begin{bmatrix} \epsilon_r \\ \epsilon_i \end{bmatrix}$$
+
+Notice that $x_{shifted} = l_{11}\epsilon_r$. This means that, because $\mathbf{L}$ is lower triangular, the real part $x$ only depends on $\epsilon_r$. But $y_{shifted} = l_{21}\epsilon_r + l_{22}\epsilon_i$, so the imaginary part $y$ depends on both. This is what creates the covariance and correlation between them. Now we just add our mean vector $\boldsymbol{\mu_{h_j}} = [\mu_r, \mu_i]^T$ to get the final, explicit coordinates for our sampled complex number: $x = \mu_r + l_{11}\epsilon_r$ and $y = \mu_i + l_{21}\epsilon_r + l_{22}\epsilon_i$. By factoring out the $\epsilon_r$ and $\epsilon_i$, we get Nakashika's complex multipliers $k_r$ and $k_i$.
+
+- $k_r = l_{11} + i l_{21} = \sqrt{\frac{\sigma + \delta_r}{2}} + i \frac{\delta_i}{\sqrt{2(\sigma + \delta_r)}} = \frac{\sigma + \delta_r + i\delta_i}{\sqrt{2(\sigma + \delta_r)}}$
+
+- $k_i = i l_{22} = i\sqrt{\frac{\sigma^2 - |\delta|^2}{2(\sigma + \delta_r)}}$
+
+And finally in the vector form, we have $\mathbf{\tilde{h}} = \mathbf{\mu} + \mathbf{k}_r \mathbf{\epsilon}_r + \mathbf{k}_i \mathbf{\epsilon}_i$.
 
 ### Reconstruction Loss
 
-After passing through the complex latent space, we require a maximum likelihood estimation of our data $\mathbf{z}$ given the latent variables $\mathbf{h}$. Assuming our output is a complex normal $\mathcal{N}_c(\boldsymbol{\mu}, \mathbf{I}, \mathbf{0})$, this elegantly simplifies in exact parallel to a standard VAE:
-$$ \mathbb{E}_{q_\phi(\mathbf{h}|\mathbf{z})}[\log p_\theta(\mathbf{z}|\mathbf{h})] \approx -||\mathbf{z} - \boldsymbol{\mu}||_2^2 $$
-Which is, beautifully, just the Mean Squared Error (MSE).
+After passing through the complex latent space, we require a maximum likelihood estimation of our data $\mathbf{z}$ given the latent variables $\mathbf{h}$. Assuming our output is a complex normal $\mathcal{N}_c(\boldsymbol{\mu}, \mathbf{I}, \mathbf{O})$, this approximately simplifies to the MSE in exact parallel to a standard VAE. The probability density function for a circular complex Gaussian of a $D$-dimensional vector $\mathbf{z}$ is defined as: $p(\mathbf{z}) = \frac{1}{\pi^D \vert{}\mathbf{\Gamma}\vert{}} \exp\left( -(\mathbf{z} - \boldsymbol{\mu})^H \mathbf{\Gamma}^{-1} (\mathbf{z} - \boldsymbol{\mu}) \right)$. Because we defined our covariance $\mathbf{\Gamma}$ as the identity matrix $\mathbf{I}$, the equation simplifies to $p_\theta(\mathbf{z}\vert{}\mathbf{h}) = \frac{1}{\pi^D} \exp\left( -(\mathbf{z} - \boldsymbol{\mu})^H (\mathbf{z} - \boldsymbol{\mu}) \right)$. Now, to get our log-likelihood, we just take the natural logarithm of both sides:
 
-With the mathematical intuition laid out, the implementation becomes a strict translation of these complex constraints. Below, we provide the architecture (generalizable, though complex networks are notoriously sensitive to scale changes) and the vastly improved phase-aware reconstruction results. -->
+$$\log p_\theta(\mathbf{z}\vert{}\mathbf{h}) = \log\left( \frac{1}{\pi^D} \right) - (\mathbf{z} - \boldsymbol{\mu})^H (\mathbf{z} - \boldsymbol{\mu})$$
+$$\log p_\theta(\mathbf{z}\vert{}\mathbf{h}) = -D\log(\pi) - (\mathbf{z} - \boldsymbol{\mu})^H (\mathbf{z} - \boldsymbol{\mu})$$
+
+But when optimizing a neural network, we only care about terms affected by our network's weights. The term $-D\log(\pi)$ is a constant, meaning its gradient is zero, so we can drop it from our loss function. We also know that multiplying a complex vector by its conjugate transpose yields the squared $L_2$ norm, therefore we have $\log p_\theta(\mathbf{z}\vert{}\mathbf{h}) \propto -\vert{}\vert{}\mathbf{z} - \boldsymbol{\mu}\vert{}\vert{}_2^2$. Now when we take the expectation $\mathbb{E}_{q_\phi}$ over our sampled latent variables, we also stick to the one sample Monte Carlo on top of the reparameterization trick, so we get $ \mathbb{E}_{q_\phi(\mathbf{h}|\mathbf{z})}[\log p_\theta(\mathbf{z}|\mathbf{h})] \approx -||\mathbf{z} - \boldsymbol{\mu}||_2^2 $ and we can simply calculate this squared distance.
+
+### Results
+
+With the mathematical intuition fully laid out, the actual implementation becomes more of a translation of these complex constraints into our neural architecture. Below, we provide an overview of the used architecture. While we kept it entirely generalizable so you can experiment with it, a word of caution: this network was notoriously more sensitive to changes and was much harder to train than its real-valued counterparts. Be careful with your changes to avoid latent space collapse. Finally, we showcase the vastly improved, phase-aware reconstruction results and also provide a little bit of latent space dreaming.
