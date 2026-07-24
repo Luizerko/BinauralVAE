@@ -150,7 +150,15 @@ Now, to get our log-likelihood, we just take the natural logarithm of both sides
 $$\log p_\theta(\mathbf{z}\vert{}\mathbf{h}) = \log\left( \frac{1}{\pi^D} \right) - (\mathbf{z} - \mathbf{\mu})^H (\mathbf{z} - \mathbf{\mu})$$
 $$\log p_\theta(\mathbf{z}\vert{}\mathbf{h}) = -D\log(\pi) - (\mathbf{z} - \mathbf{\mu})^H (\mathbf{z} - \mathbf{\mu})$$
 
-But when optimizing a neural network, we only care about terms affected by our network's weights. The term $-D\log(\pi)$ is a constant, meaning its gradient is zero, so we can drop it from our loss function. We also know that multiplying a complex vector by its conjugate transpose yields the squared $L_2$ norm, therefore we have $\log p_\theta(\mathbf{z} \mid \mathbf{h}) \propto -\|\mathbf{z} - \mathbf{\mu}\|_2^2$. Now when we take the expectation $\mathbb{E}_{q_\phi}$ over our sampled latent variables, we also stick to the one sample Monte Carlo on top of the reparameterization trick, so we get $\mathbb{E}_{q_\phi(\mathbf{h} \mid \mathbf{z})}[\log p_\theta(\mathbf{z} \mid \mathbf{h})] \approx -\|\mathbf{z} - \mathbf{\mu}\|_2^2$ and we can simply calculate this squared distance.
+But when optimizing a neural network, we only care about terms affected by our network's weights. The term $-D\log(\pi)$ is a constant, meaning its gradient is zero, so we can drop it from our loss function. We also know that multiplying a complex vector by its conjugate transpose yields the squared $L_2$ norm, therefore we have
+
+$$\log p_{\theta}(\mathbf{z} \mid \mathbf{h}) \propto {-||\mathbf{z} - \mathbf{\mu}||_2^2}$$
+
+Now when we take the expectation over our sampled latent variables, we also stick to the one sample Monte Carlo on top of the reparameterization trick, so we get
+
+$$\mathbb{E}_{q_\phi(\mathbf{h} \mid \mathbf{z})}[\log p_\theta(\mathbf{z} \mid \mathbf{h})] \approx -||\mathbf{z} - \mathbf{\mu}||_2^2$$
+
+and we can simply calculate this squared distance.
 
 ### Results
 
