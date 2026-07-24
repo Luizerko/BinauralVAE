@@ -17,7 +17,7 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
 </p>
 
 <div align="center">
-  <table width="800" height="350">
+  <table width="800" height="320">
     <tr>
       <td align="center" width="375" height="10">
         <video src="https://github.com/user-attachments/assets/e8e4080e-d7e8-43e9-8f8b-8e04789bf00b" controls></video>
