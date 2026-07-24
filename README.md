@@ -29,7 +29,7 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
       </td>
     </tr>
   </table>
-  <i>Figure 1 + Audio 1: Illustrative examples of one of the pipelines. Comparison of the original Mel spectrogram example (left) versus the reconstructed output (right). Listen to what they sound via Griffin-Lim reconstruction of each version below the images.</i>
+  <i>Figure 1 + Audio 1: Illustrative example of one of the pipelines, Mel VAE. Comparison of the original Mel spectrogram example (left) versus the reconstructed output (right). Listen to what they sound via Griffin-Lim reconstruction of each version below the images.</i>
 </div>
 
 <br>
@@ -54,7 +54,7 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
       </td>
     </tr>
   </table>
-  <i>Figure 2 + Audio 2: Comparison of the original magnitude and phase example (left) versus the reconstructed output (right). Listen to the direct inverse STFT playback of each version below the images.</i>
+  <i>Figure 2 + Audio 2: Illustrative example of another pipeline, the Complex-Valued VAE. Comparison of the original magnitude and phase example (left) versus the reconstructed output (right). Listen to the direct inverse STFT playback of each version below the images.</i>
 </div>
 
 ---
