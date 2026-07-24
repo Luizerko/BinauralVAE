@@ -17,12 +17,14 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
 </p>
 
 <div align="center">
-  <table width="750" height="300">
+  <table width="800" height="350">
     <tr>
       <td align="center" width="375" height="10">
+        <video src="https://github.com/user-attachments/assets/e8e4080e-d7e8-43e9-8f8b-8e04789bf00b" controls></video>
         <b>Original Mel Spectrogram Audio Reconstuction</b>
       </td>
       <td align="center" width="375" height="10">
+        <video src="https://github.com/user-attachments/assets/44de2358-ae64-4c5a-978a-13f41b4a61e2" controls></video>
         <b>Reconstructed Mel Spectrogram Audio Reconstuction</b>
       </td>
     </tr>
