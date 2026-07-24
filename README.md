@@ -10,12 +10,9 @@ Developed alongside [AudioWorldSim](https://github.com/Luizerko/AudioWorldSim), 
 
 This project was developed by [Luis Zerkowski](https://luizerko.github.io/) under the supervision of [Luiz Velho](https://lvelho.impa.br/) at [VISGRAF](https://www.visgraf.impa.br/home/index.php), the Vision and Graphics Laboratory at [IMPA](https://impa.br/?lang=en).
 
-<br>
-
 <p align="center">
   <br>
-  <img src="assets/intro_navigation.png" alt="Navigation Path" width="398" />
-  <img src="assets/intro_spectrograms.png" alt="Left and Right Ear Spectrograms" width="350" />
+  <img src="assets/mel_reconstruction.png" alt="mel reconstruction" width="800" />
   <br>
 </p>
 
@@ -23,18 +20,15 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
   <table width="750" height="300">
     <tr>
       <td align="center" width="375" height="10">
-        <video src="https://github.com/user-attachments/assets/541448d0-57e1-4874-82a4-ae5d3d38c718" controls></video>
-        <b>Original Dry Sound</b>
+        <b>Original Mel Spectrogram Audio Reconstuction</b>
       </td>
       <td align="center" width="375" height="10">
-        <video src="https://github.com/user-attachments/assets/eaf6176a-b589-4d5b-b225-d115c33f27c1" controls></video>
-        <b>Spatialized Sound</b>
+        <b>Reconstructed Mel Spectrogram Audio Reconstuction</b>
       </td>
     </tr>
   </table>
+  <i>Figure 1 + Audio 1: Illustrative examples of one of the pipelines. Comparison of the original Mel spectrogram example (left) versus the reconstructed output (right). Listen to what they sound via Griffin-Lim reconstruction of each version below the images.</i>
 </div>
-
-*Figure 1: Mel spectrogram reconstructions for the left and right ears, followed by audios of the original spatialized sound, original Mel audio reconstruction, and reconstructed Mel spectrogram audio reconstruction.*
 
 ---
 
@@ -81,7 +75,7 @@ pip install -r requirements_bvg.txt
 
 ## Pipeline Usage
 
-This repository offers a highly flexible pipeline: you can train a model from scratch, run a grid search for hyperparameter tuning, perform inference, or "dream" to explore your model's latent space capabilities. Because of the architectural flexibility, our scripts accept numerous parameters. They are documented below. For deeper insights into the specific models provided, please read our [Models Documentation](https://github.com/Luizerko/audio-nav/blob/main/MODELS.md).
+This repository offers a highly flexible pipeline: you can train a model from scratch, run a grid search for hyperparameter tuning, perform inference, or "dream" to explore your model's latent space capabilities. Because of the architectural flexibility, our scripts accept numerous parameters. They are documented below. For deeper insights into the specific models provided and more pipeline outputs, please read our [Models Documentation](https://github.com/Luizerko/audio-nav/blob/main/MODELS.md).
 
 ### Set Up
 
