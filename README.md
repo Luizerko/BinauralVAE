@@ -32,6 +32,31 @@ This project was developed by [Luis Zerkowski](https://luizerko.github.io/) unde
   <i>Figure 1 + Audio 1: Illustrative examples of one of the pipelines. Comparison of the original Mel spectrogram example (left) versus the reconstructed output (right). Listen to what they sound via Griffin-Lim reconstruction of each version below the images.</i>
 </div>
 
+<br>
+<br>
+
+<p align="center">
+  <br>
+  <img src="assets/cvae_reconstruction.png" alt="complex stft reconstruction" width="800" />
+  <br>
+</p>
+
+<div align="center">
+  <table width="800" height="320">
+    <tr>
+      <td align="center" width="375" height="10">
+        <video src="https://github.com/user-attachments/assets/41c85043-3c4f-46fc-b1fe-f1ab8901e648" controls></video>
+        <b>Original Complex STFT Spectrogram Audio Reconstuction</b>
+      </td>
+      <td align="center" width="375" height="10">
+        <video src="https://github.com/user-attachments/assets/988f80d6-9ac2-4359-aa39-589270df25ff" controls></video>
+        <b>Reconstructed Complex STFT Spectrogram Audio Reconstuction</b>
+      </td>
+    </tr>
+  </table>
+  <i>Figure 2 + Audio 2: Comparison of the original magnitude and phase example (left) versus the reconstructed output (right). Listen to the direct inverse STFT playback of each version below the images.</i>
+</div>
+
 ---
 
 ## Introduction
