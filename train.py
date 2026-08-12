@@ -24,13 +24,16 @@ def train(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     dataset = BinauralDataset(args.dataset_dir, args.dataset_method)
-    
-    train_size = int(args.train_size * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    test_size = int(0.1*len(dataset))
+    remaining_size = len(dataset) - test_size
+    train_size = int(args.train_size * remaining_size)
+    val_size = remaining_size - train_size
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
     
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     # Initializing model
     sample_shape = dataset[0].shape
@@ -100,7 +103,6 @@ def train(args):
             train_rec_loss += rec_loss.item()
             train_kl_loss += kl_loss.item()
             train_total_loss += rec_loss.item() + kl_loss.item()
-            print(rec_loss.item(), kl_loss.item())
 
         # Computing average training loss for logging
         train_rec_loss = train_rec_loss/len(train_dataloader)
@@ -177,6 +179,37 @@ def train(args):
         if patience_counter >= patience_limit:
             print(f"Early stopping triggered at epoch {epoch}\n")
             break
+
+    # Test set evaluation after training
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    best_epoch = checkpoint['epoch']
+
+    model.eval()
+    test_rec_loss = 0.0
+    test_kl_loss = 0.0
+    progress_bar = tqdm(enumerate(test_dataloader), total=len(test_dataloader), desc='[Test Evaluation]')
+    with torch.no_grad():
+        for batch_idx, batch in progress_bar:
+            x = batch.to(device)
+            
+            if args.dataset_method == 'mel' or args.dataset_method == 'stft_4ch':
+                rec, mu, logvar = model(x)
+                rec_loss, kl_loss, _ = model.loss(rec, x, mu, logvar, beta=args.beta_max)
+            elif args.dataset_method == 'stft_complex':
+                rec, mu, sigma, delta = model(x)
+                rec_loss, kl_loss, _ = model.loss(rec, x, mu, sigma, delta, beta=args.beta_max)
+            
+            test_rec_loss += rec_loss.item()
+            test_kl_loss += kl_loss.item()
+            
+    test_rec_loss /= len(test_dataloader)
+    test_kl_loss /= len(test_dataloader)
+    
+    print(f"\nFinal Test Set Results (Model from epoch {best_epoch}):")
+    print(f"Test reconstruction loss: {test_rec_loss:.4f} | Test KL divergence: {test_kl_loss:.4f}\n")
+    writer.add_scalar('Loss/Test_Reconstruction', test_rec_loss, best_epoch)
+    writer.add_scalar('Loss/Test_KL_Divergence', test_kl_loss, best_epoch)
 
     writer.close()
 
