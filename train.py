@@ -206,7 +206,6 @@ def train(args):
     test_rec_loss /= len(test_dataloader)
     test_kl_loss /= len(test_dataloader)
     
-    print(f"\nFinal Test Set Results (Model from epoch {best_epoch}):")
     print(f"Test reconstruction loss: {test_rec_loss:.4f} | Test KL divergence: {test_kl_loss:.4f}\n")
     writer.add_scalar('Loss/Test_Reconstruction', test_rec_loss, best_epoch)
     writer.add_scalar('Loss/Test_KL_Divergence', test_kl_loss, best_epoch)
