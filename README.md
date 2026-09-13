@@ -247,7 +247,15 @@ python dream.py --reference_seed <seed_idx> [ARGS]
 If you found this work helpful, please cite our technical report:
 
 ```plaintext
-[ArXiv link coming soon :)]
+@misc{zerkowski2026binauralvaespatialaudioreconstruction,
+      title={BinauralVAE: Spatial Audio Reconstruction For World Models}, 
+      author={Luis Vitor Zerkowski and Luiz Velho},
+      year={2026},
+      eprint={2609.06837},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD},
+      url={https://arxiv.org/abs/2609.06837}, 
+}
 ```
 
 Please also ensure you cite the core works that made this pipeline possible:
